@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicegui/tauri-client/main/tauri-client/src/capability.json",
+  "identifier": "default",
+  "description": "Default capabilities for SaraaTEK",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-open",
+    "dialog:default"
+  ]
+}

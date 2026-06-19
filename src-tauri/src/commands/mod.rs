@@ -1,0 +1,13 @@
+pub mod ai_messaging;
+pub mod audit;
+pub mod customers;
+pub mod notifications;
+pub mod openrouter;
+pub mod payments;
+pub mod photos;
+pub mod quotations;
+pub mod repairs;
+pub mod reports;
+pub mod settings;
+pub mod technicians;
+pub mod warranties;
