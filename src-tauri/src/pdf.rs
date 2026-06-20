@@ -20,15 +20,126 @@ fn rgb(r: f32, g: f32, b: f32) -> Rgb {
     }
 }
 
+/// Per-1000-em-unit advance widths for the core Helvetica font (Adobe AFM
+/// metrics). Using real metrics instead of a flat "characters * fudge
+/// factor" estimate is what keeps right-aligned and centered text (titles,
+/// the tagline, totals) from drifting off the page or overlapping other
+/// elements — the single biggest source of misaligned-looking PDFs.
+fn helvetica_char_width_units(c: char) -> f32 {
+    match c {
+        ' ' => 278.0,
+        '!' => 278.0,
+        '"' => 355.0,
+        '#' => 556.0,
+        '$' => 556.0,
+        '%' => 889.0,
+        '&' => 667.0,
+        '\'' => 191.0,
+        '(' => 333.0,
+        ')' => 333.0,
+        '*' => 389.0,
+        '+' => 584.0,
+        ',' => 278.0,
+        '-' | '\u{2014}' | '\u{2013}' => 333.0,
+        '.' => 278.0,
+        '/' => 278.0,
+        '0'..='9' => 556.0,
+        ':' => 278.0,
+        ';' => 278.0,
+        '<' => 584.0,
+        '=' => 584.0,
+        '>' => 584.0,
+        '?' => 556.0,
+        '@' => 1015.0,
+        'A' => 667.0,
+        'B' => 667.0,
+        'C' => 722.0,
+        'D' => 722.0,
+        'E' => 667.0,
+        'F' => 611.0,
+        'G' => 778.0,
+        'H' => 722.0,
+        'I' => 278.0,
+        'J' => 500.0,
+        'K' => 667.0,
+        'L' => 556.0,
+        'M' => 833.0,
+        'N' => 722.0,
+        'O' => 778.0,
+        'P' => 667.0,
+        'Q' => 778.0,
+        'R' => 722.0,
+        'S' => 667.0,
+        'T' => 611.0,
+        'U' => 722.0,
+        'V' => 667.0,
+        'W' => 944.0,
+        'X' => 667.0,
+        'Y' => 667.0,
+        'Z' => 611.0,
+        '[' => 278.0,
+        '\\' => 278.0,
+        ']' => 278.0,
+        '^' => 469.0,
+        '_' => 556.0,
+        '`' => 333.0,
+        'a' => 556.0,
+        'b' => 556.0,
+        'c' => 500.0,
+        'd' => 556.0,
+        'e' => 556.0,
+        'f' => 278.0,
+        'g' => 556.0,
+        'h' => 556.0,
+        'i' => 222.0,
+        'j' => 222.0,
+        'k' => 500.0,
+        'l' => 222.0,
+        'm' => 833.0,
+        'n' => 556.0,
+        'o' => 556.0,
+        'p' => 556.0,
+        'q' => 556.0,
+        'r' => 333.0,
+        's' => 500.0,
+        't' => 278.0,
+        'u' => 556.0,
+        'v' => 500.0,
+        'w' => 722.0,
+        'x' => 500.0,
+        'y' => 500.0,
+        'z' => 500.0,
+        '{' => 334.0,
+        '|' => 260.0,
+        '}' => 334.0,
+        '~' => 584.0,
+        '\u{2018}' | '\u{2019}' => 222.0,
+        '\u{201c}' | '\u{201d}' => 333.0,
+        _ => 556.0,
+    }
+}
+
+/// Width of `text` in mm when rendered at `font_size` points. `bold` applies
+/// a small widening factor since Helvetica-Bold glyphs run ~4-7% wider than
+/// regular Helvetica (close enough for layout purposes — we don't need
+/// sub-pixel accuracy, just to stop text overrunning the page edge).
+fn text_width_mm(text: &str, font_size: f32, bold: bool) -> f32 {
+    let units: f32 = text.chars().map(helvetica_char_width_units).sum();
+    let factor = if bold { 1.06 } else { 1.0 };
+    units / 1000.0 * font_size * 0.3528 * factor
+}
+
 fn calc_y(current_y: f32, offset: f32) -> f32 {
     current_y - offset
 }
 
 fn draw_header(ops: &mut Vec<Op>, shop_name: &str, tagline: &str, y: &mut f32) {
-    let h = 18.0;
+    let h = 22.0;
     *y = PAGE_H - MARGIN;
+
+    // Dark header band (matches the shop's black/dark branding, not generic purple)
     ops.push(Op::SetFillColor {
-        col: Color::Rgb(rgb(PURPLE_R, PURPLE_G, PURPLE_B)),
+        col: Color::Rgb(rgb(0.06, 0.06, 0.08)),
     });
     ops.push(Op::DrawRectangle {
         rectangle: Rect::from_xywh(
@@ -38,47 +149,67 @@ fn draw_header(ops: &mut Vec<Op>, shop_name: &str, tagline: &str, y: &mut f32) {
             Mm(h).into(),
         ),
     });
+
+    // Thin purple accent strip under the header — the one place brand purple
+    // carries through, instead of painting the whole bar purple.
     ops.push(Op::SetFillColor {
-        col: Color::Rgb(rgb(1.0, 1.0, 1.0)),
+        col: Color::Rgb(rgb(PURPLE_R, PURPLE_G, PURPLE_B)),
+    });
+    ops.push(Op::DrawRectangle {
+        rectangle: Rect::from_xywh(
+            Mm(0.0).into(),
+            Mm(*y - h - 1.2).into(),
+            Mm(PAGE_W).into(),
+            Mm(1.2).into(),
+        ),
+    });
+
+    // Shop wordmark — left aligned, accent-colored against the dark band
+    ops.push(Op::SetFillColor {
+        col: Color::Rgb(rgb(0.96, 0.30, 0.55)),
     });
     ops.push(Op::SetFont {
         font: PdfFontHandle::Builtin(BuiltinFont::HelveticaBold),
-        size: Pt(14.0),
+        size: Pt(16.0),
     });
     ops.push(Op::StartTextSection);
     ops.push(Op::SetTextCursor {
         pos: Point {
-            x: Mm(MARGIN + 5.0).into(),
-            y: Mm(*y - h + 4.5).into(),
+            x: Mm(MARGIN).into(),
+            y: Mm(*y - h / 2.0 - 1.0).into(),
         },
     });
     ops.push(Op::ShowText {
         items: vec![TextItem::Text(shop_name.to_string())],
     });
     ops.push(Op::EndTextSection);
+
+    // Tagline — right-aligned, light italic, quoted (matches the printed template)
     ops.push(Op::SetFillColor {
-        col: Color::Rgb(rgb(1.0, 1.0, 1.0)),
+        col: Color::Rgb(rgb(0.85, 0.85, 0.88)),
     });
     ops.push(Op::SetFont {
-        font: PdfFontHandle::Builtin(BuiltinFont::HelveticaBold),
-        size: Pt(7.0),
+        font: PdfFontHandle::Builtin(BuiltinFont::HelveticaOblique),
+        size: Pt(7.5),
     });
-    let tag_w = (tagline.len() as f32) * 7.0 * 0.3528 * 0.55;
+    let quoted = format!("\"{tagline}\"");
+    let tag_w = text_width_mm(&quoted, 7.5, false);
     ops.push(Op::StartTextSection);
     ops.push(Op::SetTextCursor {
         pos: Point {
-            x: Mm(PAGE_W - MARGIN - 5.0 - tag_w).into(),
-            y: Mm(*y - h + 5.0).into(),
+            x: Mm(PAGE_W - MARGIN - tag_w).into(),
+            y: Mm(*y - h / 2.0 - 1.0).into(),
         },
     });
     ops.push(Op::ShowText {
-        items: vec![TextItem::Text(tagline.to_string())],
+        items: vec![TextItem::Text(quoted)],
     });
     ops.push(Op::EndTextSection);
+
     ops.push(Op::SetFillColor {
         col: Color::Rgb(rgb(0.0, 0.0, 0.0)),
     });
-    *y = *y - h - 8.0;
+    *y = *y - h - 1.2 - 8.0;
 }
 
 fn draw_title(ops: &mut Vec<Op>, y: &mut f32) {
@@ -829,9 +960,9 @@ pub struct QuotationPdfData {
 
 fn draw_item_table(ops: &mut Vec<Op>, items: &[QuotationPdfItem], y: &mut f32) -> f32 {
     let col_desc_x = MARGIN + 2.0;
-    let col_qty_x = MARGIN + 100.0;
-    let col_price_x = MARGIN + 130.0;
-    let col_total_x = MARGIN + 165.0;
+    let col_price_x = MARGIN + 108.0;
+    let col_qty_x = MARGIN + 140.0;
+    let col_total_x = MARGIN + 160.0;
     let row_h = 7.0;
     let header_h = 8.0;
 
@@ -855,8 +986,8 @@ fn draw_item_table(ops: &mut Vec<Op>, items: &[QuotationPdfItem], y: &mut f32) -
         font: PdfFontHandle::Builtin(BuiltinFont::HelveticaBold),
         size: Pt(7.0),
     });
-    let headers = ["Description", "Qty", "Unit Price", "Total"];
-    let hx = [col_desc_x, col_qty_x, col_price_x, col_total_x];
+    let headers = ["DESCRIPTION", "PRICE", "QTY", "TOTAL"];
+    let hx = [col_desc_x, col_price_x, col_qty_x, col_total_x];
     for (i, h) in headers.iter().enumerate() {
         ops.push(Op::StartTextSection);
         ops.push(Op::SetTextCursor {
@@ -904,14 +1035,17 @@ fn draw_item_table(ops: &mut Vec<Op>, items: &[QuotationPdfItem], y: &mut f32) -
         } else {
             "[P]"
         };
-        let desc = if item.description.len() > 26 {
-            format!("{}..", &item.description[..24])
+        // Char-safe truncation (the description may contain multi-byte
+        // UTF-8 characters, so slicing by byte index can panic).
+        let desc: String = if item.description.chars().count() > 38 {
+            let truncated: String = item.description.chars().take(36).collect();
+            format!("{truncated}..")
         } else {
             item.description.clone()
         };
         ops.push(Op::SetFont {
-            font: PdfFontHandle::Builtin(BuiltinFont::Helvetica),
-            size: Pt(7.0),
+            font: PdfFontHandle::Builtin(BuiltinFont::HelveticaBold),
+            size: Pt(7.5),
         });
         ops.push(Op::StartTextSection);
         ops.push(Op::SetTextCursor {
@@ -959,14 +1093,14 @@ fn draw_item_table(ops: &mut Vec<Op>, items: &[QuotationPdfItem], y: &mut f32) -
             });
         }
         let vals = [
-            item.quantity.to_string(),
             format!("{:.2}", item.unit_price),
+            item.quantity.to_string(),
             format!("{:.2}", item.total),
         ];
-        let vx = [col_qty_x, col_price_x, col_total_x];
+        let vx = [col_price_x, col_qty_x, col_total_x];
         ops.push(Op::SetFont {
             font: PdfFontHandle::Builtin(BuiltinFont::Helvetica),
-            size: Pt(7.0),
+            size: Pt(7.5),
         });
         for (j, val) in vals.iter().enumerate() {
             ops.push(Op::StartTextSection);
@@ -1078,12 +1212,12 @@ fn draw_summary_box(ops: &mut Vec<Op>, subtotal: f64, tax: f64, grand_total: f64
     cur_y - line_h - 6.0
 }
 
-fn draw_right_text(ops: &mut Vec<Op>, text: &str, font_size: f32, y: f32) {
-    let est_w = (text.len() as f32) * font_size * 0.3528 * 0.55;
+fn draw_right_text(ops: &mut Vec<Op>, text: &str, font_size: f32, y: f32, bold: bool) {
+    let est_w = text_width_mm(text, font_size, bold);
     ops.push(Op::StartTextSection);
     ops.push(Op::SetTextCursor {
         pos: Point {
-            x: Mm(PAGE_W - MARGIN - 5.0 - est_w).into(),
+            x: Mm(PAGE_W - MARGIN - est_w).into(),
             y: Mm(y).into(),
         },
     });
@@ -1152,16 +1286,42 @@ fn draw_label(ops: &mut Vec<Op>, text: &str, x: f32, y: f32) {
     ops.push(Op::EndTextSection);
 }
 
+/// Greedy word-wrap: splits `text` into lines that each fit within
+/// `max_width_mm` at the given font size, using real glyph widths so
+/// paragraphs (like the terms & conditions block) wrap cleanly instead of
+/// overflowing the page edge.
+fn wrap_text(text: &str, font_size: f32, bold: bool, max_width_mm: f32) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut current = String::new();
+    for word in text.split_whitespace() {
+        let candidate = if current.is_empty() {
+            word.to_string()
+        } else {
+            format!("{current} {word}")
+        };
+        if text_width_mm(&candidate, font_size, bold) <= max_width_mm || current.is_empty() {
+            current = candidate;
+        } else {
+            lines.push(current);
+            current = word.to_string();
+        }
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    lines
+}
+
 fn draw_terms_and_conditions(ops: &mut Vec<Op>, start_y: f32) -> f32 {
     let mut y = start_y;
     draw_section_header(ops, "TERMS & CONDITIONS", &mut y);
     let terms = [
-        "1. This quotation is valid for 30 days from the date above.",
-        "2. Payment is due at the time of collection.",
-        "3. A 3-month warranty applies to all labour and parts.",
-        "4. Warranty covers manufacturing defects only, not physical or liquid damage.",
-        "5. Data backup is the customer's sole responsibility.",
-        "6. Unclaimed devices after 90 days from notification may be disposed of.",
+        "60% advance payment is required before work begins.",
+        "Warranty period is one year less 15 working days (1 yr = 350 days, 2 yr = 700 days, 3 yr = 1050 days).",
+        "Warranty covers manufacturer's defects only. Damage from negligence, misuse, improper operation, power fluctuation, lightning, other natural disasters, sabotage, or accident is not covered.",
+        "No warranty on: keyboard, mouse, speakers, power adapters, toners, ink cartridges, printer heads.",
+        "No warranty applies if there are burn marks, physical damage, or corrosion on the item.",
+        "Goods once sold are not returnable under any circumstances.",
     ];
     ops.push(Op::SetFont {
         font: PdfFontHandle::Builtin(BuiltinFont::Helvetica),
@@ -1170,21 +1330,53 @@ fn draw_terms_and_conditions(ops: &mut Vec<Op>, start_y: f32) -> f32 {
     ops.push(Op::SetFillColor {
         col: Color::Rgb(rgb(0.2, 0.2, 0.2)),
     });
-    let line_h = 4.5;
-    for line in &terms {
+    let line_h = 3.6;
+    let bullet_indent = 4.0;
+    for term in &terms {
+        let wrapped = wrap_text(term, 7.5, false, CONTENT_W - bullet_indent);
+        for (i, line) in wrapped.iter().enumerate() {
+            let prefix = if i == 0 { "•  " } else { "   " };
+            ops.push(Op::StartTextSection);
+            ops.push(Op::SetTextCursor {
+                pos: Point {
+                    x: Mm(MARGIN).into(),
+                    y: Mm(y).into(),
+                },
+            });
+            ops.push(Op::ShowText {
+                items: vec![TextItem::Text(format!("{prefix}{line}"))],
+            });
+            ops.push(Op::EndTextSection);
+            y -= line_h;
+        }
+    }
+
+    // Bold warranty-claim summary line, matching the printed template
+    y -= 1.5;
+    ops.push(Op::SetFont {
+        font: PdfFontHandle::Builtin(BuiltinFont::HelveticaBold),
+        size: Pt(7.5),
+    });
+    ops.push(Op::SetFillColor {
+        col: Color::Rgb(rgb(0.0, 0.0, 0.0)),
+    });
+    let claim = "WARRANTY CLAIM ONE YEAR LESS 17 DAYS. NO WARRANTY FOR CHIP BURNS OR PHYSICAL DAMAGE. PLEASE PRODUCE THE INVOICE FOR WARRANTY CLAIMS.";
+    for line in wrap_text(claim, 7.5, true, CONTENT_W) {
+        let line_w = text_width_mm(&line, 7.5, true);
         ops.push(Op::StartTextSection);
         ops.push(Op::SetTextCursor {
             pos: Point {
-                x: Mm(MARGIN).into(),
+                x: Mm(MARGIN + (CONTENT_W - line_w) / 2.0).into(),
                 y: Mm(y).into(),
             },
         });
         ops.push(Op::ShowText {
-            items: vec![TextItem::Text(line.to_string())],
+            items: vec![TextItem::Text(line)],
         });
         ops.push(Op::EndTextSection);
         y -= line_h;
     }
+
     ops.push(Op::SetFillColor {
         col: Color::Rgb(rgb(0.0, 0.0, 0.0)),
     });
@@ -1286,7 +1478,7 @@ fn generate_document_pdf(
         font: PdfFontHandle::Builtin(BuiltinFont::HelveticaBold),
         size: Pt(18.0),
     });
-    draw_right_text(&mut ops, doc_title, 18.0, y);
+    draw_right_text(&mut ops, doc_title, 18.0, y, true);
     y = calc_y(y, 10.0);
 
     // Repair ID — right-aligned below title
@@ -1302,6 +1494,7 @@ fn generate_document_pdf(
         &format!("Repair #: {}", data.quotation_id),
         9.0,
         y,
+        false,
     );
     y = calc_y(y, 3.0);
     ops.push(Op::SetFillColor {
@@ -1441,37 +1634,93 @@ fn generate_document_pdf(
     // Signatures
     let _ = draw_signatures(&mut ops, y);
 
-    // Footer
-    y = 15.0;
+    // Footer — dark band mirroring the header, two centered contact rows
+    let footer_h = 16.0;
+    ops.push(Op::SetFillColor {
+        col: Color::Rgb(rgb(PURPLE_R, PURPLE_G, PURPLE_B)),
+    });
+    ops.push(Op::DrawRectangle {
+        rectangle: Rect::from_xywh(
+            Mm(0.0).into(),
+            Mm(footer_h).into(),
+            Mm(PAGE_W).into(),
+            Mm(1.2).into(),
+        ),
+    });
+    ops.push(Op::SetFillColor {
+        col: Color::Rgb(rgb(0.06, 0.06, 0.08)),
+    });
+    ops.push(Op::DrawRectangle {
+        rectangle: Rect::from_xywh(
+            Mm(0.0).into(),
+            Mm(0.0).into(),
+            Mm(PAGE_W).into(),
+            Mm(footer_h).into(),
+        ),
+    });
+
+    let mut row1: Vec<&str> = Vec::new();
+    if !data.shop_phone.is_empty() {
+        row1.push(&data.shop_phone);
+    }
+    if !data.shop_email.is_empty() {
+        row1.push(&data.shop_email);
+    }
+    if !data.shop_whatsapp.is_empty() {
+        row1.push(&data.shop_whatsapp);
+    }
+    let mut row2: Vec<&str> = Vec::new();
+    if !data.shop_address.is_empty() {
+        row2.push(&data.shop_address);
+    }
+    if !data.shop_facebook.is_empty() {
+        row2.push(&data.shop_facebook);
+    }
+
+    ops.push(Op::SetFont {
+        font: PdfFontHandle::Builtin(BuiltinFont::Helvetica),
+        size: Pt(7.5),
+    });
+    ops.push(Op::SetFillColor {
+        col: Color::Rgb(rgb(0.92, 0.92, 0.94)),
+    });
+    let row1_text = row1.join("   |   ");
+    let row1_w = text_width_mm(&row1_text, 7.5, false);
+    ops.push(Op::StartTextSection);
+    ops.push(Op::SetTextCursor {
+        pos: Point {
+            x: Mm((PAGE_W - row1_w) / 2.0).into(),
+            y: Mm(9.5).into(),
+        },
+    });
+    ops.push(Op::ShowText {
+        items: vec![TextItem::Text(row1_text)],
+    });
+    ops.push(Op::EndTextSection);
+
+    ops.push(Op::SetFillColor {
+        col: Color::Rgb(rgb(0.65, 0.65, 0.7)),
+    });
+    let row2_text = row2.join("   |   ");
+    let row2_w = text_width_mm(&row2_text, 7.0, false);
     ops.push(Op::SetFont {
         font: PdfFontHandle::Builtin(BuiltinFont::Helvetica),
         size: Pt(7.0),
     });
-    ops.push(Op::SetFillColor {
-        col: Color::Rgb(rgb(0.5, 0.5, 0.5)),
+    ops.push(Op::StartTextSection);
+    ops.push(Op::SetTextCursor {
+        pos: Point {
+            x: Mm((PAGE_W - row2_w) / 2.0).into(),
+            y: Mm(4.5).into(),
+        },
     });
-    let mut footer_parts: Vec<&str> = Vec::new();
-    if !data.shop_phone.is_empty() {
-        footer_parts.push(&data.shop_phone);
-    }
-    if !data.shop_email.is_empty() {
-        footer_parts.push(&data.shop_email);
-    }
-    if !data.shop_whatsapp.is_empty() {
-        footer_parts.push(&data.shop_whatsapp);
-    }
-    if !data.shop_address.is_empty() {
-        footer_parts.push(&data.shop_address);
-    }
-    if !data.shop_facebook.is_empty() {
-        footer_parts.push(&data.shop_facebook);
-    }
-    let footer = if footer_parts.is_empty() {
-        format!("{} | Page 1 of 1", data.shop_name)
-    } else {
-        format!("{} | Page 1 of 1", footer_parts.join(" | "))
-    };
-    draw_label(ops.as_mut(), &footer, MARGIN, y);
+    ops.push(Op::ShowText {
+        items: vec![TextItem::Text(row2_text)],
+    });
+    ops.push(Op::EndTextSection);
+    ops.push(Op::SetFillColor {
+        col: Color::Rgb(rgb(0.0, 0.0, 0.0)),
+    });
 
     let page = PdfPage::new(Mm(PAGE_W), Mm(PAGE_H), ops);
     doc.pages.push(page);
