@@ -145,7 +145,13 @@ impl Database {
                 ('fonnte_api_token', ''),
                 ('default_country_code', '94'),
                 ('openrouter_api_key', ''),
-                ('openrouter_model', 'meta-llama/llama-3.1-8b-instruct:free');
+                ('openrouter_model', 'meta-llama/llama-3.1-8b-instruct:free'),
+                ('smtp_host', ''),
+                ('smtp_port', '587'),
+                ('smtp_username', ''),
+                ('smtp_password', ''),
+                ('smtp_from_name', 'SaraaTEK'),
+                ('smtp_from_email', '');
         ",).map_err(|e| e.to_string())?;
 
         let has_address: bool = conn
@@ -158,7 +164,6 @@ impl Database {
             conn.execute_batch("ALTER TABLE customers ADD COLUMN address TEXT;")
                 .map_err(|e| e.to_string())?;
         }
-
         conn.execute_batch(
             "
             CREATE TABLE IF NOT EXISTS photos (
@@ -204,6 +209,19 @@ impl Database {
             ",
         )
         .map_err(|e| e.to_string())?;
+
+        let has_channel: bool = conn
+            .prepare("SELECT COUNT(*) FROM pragma_table_info('notifications') WHERE name = ?")
+            .map_err(|e| e.to_string())?
+            .query_row(["channel"], |r| r.get::<_, i64>(0))
+            .map_err(|e| e.to_string())?
+            > 0;
+        if !has_channel {
+            conn.execute_batch(
+                "ALTER TABLE notifications ADD COLUMN channel TEXT NOT NULL DEFAULT 'whatsapp';",
+            )
+            .map_err(|e| e.to_string())?;
+        }
 
         Ok(())
     }
@@ -273,7 +291,7 @@ mod tests {
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM shop_settings", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(count, 16, "shop_settings should have exactly 16 seed rows");
+        assert_eq!(count, 22, "shop_settings should have exactly 22 seed rows");
     }
 
     #[test]
@@ -291,7 +309,7 @@ mod tests {
             .filter_map(|r| r.ok())
             .collect();
 
-        assert_eq!(rows.len(), 16, "expected 16 seed settings");
+        assert_eq!(rows.len(), 22, "expected 22 seed settings");
         assert!(rows.contains(&("shop_name".into(), "SaraaTEK".into())));
         assert!(rows.contains(&("default_country_code".into(), "94".into())));
         assert!(rows.contains(&(

@@ -1725,6 +1725,22 @@ fn build_quotation_pdf_data(
     })
 }
 
+/// Opens an arbitrary file with the OS-associated default application.
+/// Used so "View Quotation" / "View Invoice" actually opens the PDF that
+/// was just generated, instead of leaving the technician to dig through
+/// the output folder manually.
+#[tauri::command]
+pub fn open_file_path(path: String) -> Result<(), String> {
+    if !std::path::Path::new(&path).exists() {
+        return Err(format!("File not found: {path}"));
+    }
+    std::process::Command::new("explorer")
+        .arg(&path)
+        .spawn()
+        .map_err(|e| format!("Failed to open file: {e}"))?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn generate_quotation_pdf_file(
     repair_id: String,

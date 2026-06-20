@@ -5,6 +5,7 @@ import { Card } from '../components/Card'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { Input } from '../components/Input'
 import { Button } from '../components/Button'
+import { formatSriLankanPhone, displayPhone } from '../lib/phone'
 import type { Customer } from '../types'
 
 export function NewRepairStep1() {
@@ -20,12 +21,19 @@ export function NewRepairStep1() {
   const [isExisting, setIsExisting] = useState(false)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
+  const [phoneError, setPhoneError] = useState('')
 
   const handlePhoneSearch = async () => {
-    if (phone.length < 3) return
+    const formatted = formatSriLankanPhone(phone)
+    if (!formatted) {
+      setPhoneError('Enter a valid Sri Lankan number, e.g. 0771234567 or +94 77 123 4567')
+      return
+    }
+    setPhoneError('')
+    setPhone(formatted)
     setSearching(true)
     try {
-      const customer = await api.customers.search(phone)
+      const customer = await api.customers.search(formatted)
       if (customer) {
         setFoundCustomer(customer)
         setIsExisting(true)
@@ -57,6 +65,12 @@ export function NewRepairStep1() {
 
   const handleContinue = async () => {
     if (!name.trim() || phone.length < 3) return
+    const formattedPhone = formatSriLankanPhone(phone)
+    if (!formattedPhone) {
+      setPhoneError('Enter a valid Sri Lankan number, e.g. 0771234567 or +94 77 123 4567')
+      return
+    }
+    setPhoneError('')
     setCreating(true)
     try {
       let customerId: number
@@ -69,7 +83,7 @@ export function NewRepairStep1() {
         const customer = await api.customers.create({
           type: customerType,
           name,
-          phone,
+          phone: formattedPhone,
           email: email || null,
           company_name: customerType === 'business' ? companyName : null,
         })
@@ -96,9 +110,10 @@ export function NewRepairStep1() {
         <div className="space-y-4">
           <Input
             label="Phone Number"
-            placeholder="e.g. 0123456789"
+            placeholder="e.g. 0771234567 or +94 77 123 4567"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={(e) => { setPhone(e.target.value); setPhoneError('') }}
+            error={phoneError}
           />
           <Button onClick={handlePhoneSearch} variant="secondary" loading={searching} disabled={phone.length < 3}>
             Search
@@ -108,7 +123,7 @@ export function NewRepairStep1() {
             <div className="flex items-center justify-between bg-bg-elevated rounded-xl px-4 py-3">
               <div>
                 <div className="text-sm font-medium text-accent-green">Existing customer found</div>
-                <div className="text-xs text-text-secondary">{foundCustomer.name} — {foundCustomer.phone}</div>
+                <div className="text-xs text-text-secondary">{foundCustomer.name} — {displayPhone(foundCustomer.phone)}</div>
               </div>
               <Button variant="ghost" onClick={resetNewCustomer}>Different customer?</Button>
             </div>

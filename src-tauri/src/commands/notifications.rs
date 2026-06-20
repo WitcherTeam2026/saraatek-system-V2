@@ -13,6 +13,12 @@ pub struct Notification {
     pub status: String,
     pub fonnte_response: Option<String>,
     pub sent_at: String,
+    #[serde(default = "default_channel")]
+    pub channel: String,
+}
+
+fn default_channel() -> String {
+    "whatsapp".to_string()
 }
 
 fn get_setting(conn: &Connection, key: &str) -> Result<Option<String>, String> {
@@ -138,7 +144,7 @@ pub(crate) fn send_ready_notification_inner(
     };
 
     conn.execute(
-        "INSERT INTO notifications (repair_id, type, status, fonnte_response, sent_at) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO notifications (repair_id, type, status, fonnte_response, sent_at, channel) VALUES (?, ?, ?, ?, ?, 'whatsapp')",
         rusqlite::params![repair_id, "ready_for_collection", status, raw_response, now],
     )
     .map_err(|e| e.to_string())?;
@@ -152,6 +158,7 @@ pub(crate) fn send_ready_notification_inner(
         status,
         fonnte_response: raw_response,
         sent_at: now,
+        channel: "whatsapp".into(),
     })
 }
 
@@ -161,7 +168,7 @@ pub(crate) fn get_notification_history_inner(
 ) -> Result<Vec<Notification>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, repair_id, type, status, fonnte_response, sent_at
+            "SELECT id, repair_id, type, status, fonnte_response, sent_at, channel
              FROM notifications WHERE repair_id = ? ORDER BY sent_at DESC",
         )
         .map_err(|e| e.to_string())?;
@@ -175,6 +182,7 @@ pub(crate) fn get_notification_history_inner(
                 status: row.get(3)?,
                 fonnte_response: row.get(4)?,
                 sent_at: row.get(5)?,
+                channel: row.get(6)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -226,7 +234,8 @@ mod tests {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 repair_id TEXT NOT NULL REFERENCES repairs(id),
                 type TEXT NOT NULL, status TEXT NOT NULL,
-                fonnte_response TEXT, sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                fonnte_response TEXT, sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                channel TEXT NOT NULL DEFAULT 'whatsapp'
             );
             CREATE TABLE shop_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
         )

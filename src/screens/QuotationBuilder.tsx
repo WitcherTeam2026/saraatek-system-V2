@@ -5,6 +5,7 @@ import { Card } from '../components/Card'
 import { Input, Select } from '../components/Input'
 import { Button } from '../components/Button'
 import type { RepairWithCustomer, CreateQuotationItemInput } from '../types'
+import { displayPhone } from '../lib/phone'
 
 interface ItemRow {
   key: number
@@ -108,7 +109,8 @@ export function QuotationBuilder() {
         qty: it.qty,
       }))
       await api.quotations.create({ repair_id: repairId, items: inputItems })
-      await api.pdf.generateQuotationPdf(repairId, true)
+      const paths = await api.pdf.generateQuotationPdf(repairId, true)
+      try { await api.pdf.openFile(paths.split('\n')[0]) } catch { /* non-fatal */ }
       navigate('repair-detail', { repairId })
     } catch (e) {
       setError(String(e))
@@ -117,6 +119,9 @@ export function QuotationBuilder() {
     }
   }
 
+  if (loading) {
+    return <div className="text-text-muted text-center py-12">Loading...</div>
+  }
   if (!data || !repairId) {
     return <div className="text-text-muted text-center py-12">Repair not found.</div>
   }
@@ -135,7 +140,7 @@ export function QuotationBuilder() {
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div><span className="text-text-secondary">Repair ID:</span> <span className="text-text-primary">{data.repair.id}</span></div>
           <div><span className="text-text-secondary">Customer:</span> <span className="text-text-primary">{data.customer_name}</span></div>
-          <div><span className="text-text-secondary">Phone:</span> <span className="text-text-primary">{data.customer_phone}</span></div>
+          <div><span className="text-text-secondary">Phone:</span> <span className="text-text-primary">{displayPhone(data.customer_phone)}</span></div>
           <div><span className="text-text-secondary">Address:</span> <span className="text-text-primary">{data.customer_address || '-'}</span></div>
           <div><span className="text-text-secondary">Date:</span> <span className="text-text-primary">{new Date().toLocaleDateString()}</span></div>
           <div><span className="text-text-secondary">Device:</span> <span className="text-text-primary">{data.repair.brand} {data.repair.model || ''}</span></div>

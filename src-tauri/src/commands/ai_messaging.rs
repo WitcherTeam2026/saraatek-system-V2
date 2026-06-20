@@ -65,6 +65,7 @@ pub(crate) fn draft_notification_message_inner(
     repair_id: &str,
     mode: &str,
     goal: Option<&str>,
+    channel: &str,
 ) -> Result<String, String> {
     let api_key = get_setting(conn, "openrouter_api_key")?
         .ok_or_else(|| "OpenRouter API key not configured".to_string())?;
@@ -79,14 +80,26 @@ pub(crate) fn draft_notification_message_inner(
     }
 
     let context = build_repair_context(conn, repair_id)?;
+    let is_email = channel == "email";
+
+    let style_instruction = if is_email {
+        "You are a professional email writer for a computer repair shop, writing to a business \
+         customer. Use a formal but friendly tone, a short greeting and sign-off, and a clear \
+         subject line. Format your reply as exactly:\nSubject: <subject line>\n\n<email body>"
+    } else {
+        "You are a professional WhatsApp message writer for a computer repair shop, writing to \
+         an individual customer. Keep it short, warm, and conversational — this is a WhatsApp \
+         message, not an email. Do not include a subject line."
+    };
 
     let (system_prompt, user_prompt) = if mode == "template" {
         (
-            "You are a professional WhatsApp message writer for a computer repair shop. \
-             Rewrite the notification message below naturally and professionally. \
-             Keep it concise, warm, and clear. Use the same structure but vary the wording. \
-             Do not add information that isn't in the context."
-                .to_string(),
+            format!(
+                "{} Rewrite the notification message below naturally, keeping the same \
+                 information but varying the wording. Do not add information that isn't in \
+                 the context.",
+                style_instruction
+            ),
             format!(
                 "Rewrite this ready-for-collection notification:\n\n{}",
                 context
@@ -95,10 +108,11 @@ pub(crate) fn draft_notification_message_inner(
     } else {
         let goal_text = goal.unwrap_or("notify the customer");
         (
-            "You are a professional WhatsApp message writer for a computer repair shop. \
-             Given the repair context and the technician's goal, draft a short WhatsApp message. \
-             Keep it concise, warm, and professional. Never include anything not supported by the context."
-                .to_string(),
+            format!(
+                "{} Given the repair context and the technician's goal, draft the message. \
+                 Never include anything not supported by the context.",
+                style_instruction
+            ),
             format!(
                 "Repair context:\n{}\n\nTechnician's goal: {}",
                 context, goal_text
@@ -156,7 +170,7 @@ pub(crate) fn send_custom_notification_inner(
     };
 
     conn.execute(
-        "INSERT INTO notifications (repair_id, type, status, fonnte_response, sent_at) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO notifications (repair_id, type, status, fonnte_response, sent_at, channel) VALUES (?, ?, ?, ?, ?, 'whatsapp')",
         rusqlite::params![repair_id, "custom", status, raw_response, now],
     )
     .map_err(|e| e.to_string())?;
@@ -170,6 +184,7 @@ pub(crate) fn send_custom_notification_inner(
         status,
         fonnte_response: raw_response,
         sent_at: now,
+        channel: "whatsapp".into(),
     })
 }
 
@@ -234,10 +249,17 @@ pub fn draft_notification_message(
     repair_id: String,
     mode: String,
     goal: Option<String>,
+    channel: Option<String>,
     db: State<Database>,
 ) -> Result<String, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
-    draft_notification_message_inner(&conn, &repair_id, &mode, goal.as_deref())
+    draft_notification_message_inner(
+        &conn,
+        &repair_id,
+        &mode,
+        goal.as_deref(),
+        channel.as_deref().unwrap_or("whatsapp"),
+    )
 }
 
 #[tauri::command]

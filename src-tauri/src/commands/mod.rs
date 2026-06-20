@@ -1,6 +1,7 @@
 pub mod ai_messaging;
 pub mod audit;
 pub mod customers;
+pub mod email;
 pub mod notifications;
 pub mod openrouter;
 pub mod payments;

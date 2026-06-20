@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { api } from '../lib/api'
 import { useAppStore } from '../stores/app'
 import { StatusBadge } from '../components/StatusBadge'
@@ -10,6 +10,7 @@ import { PaymentModal } from '../components/PaymentModal'
 import { open } from '@tauri-apps/plugin-dialog'
 import { VALID_STATUS_TRANSITIONS, STATUS_CONFIG } from '../types'
 import type { RepairWithCustomer, RepairHistory, Technician, QuotationWithItems, QuotationItem, Payment, Photo, Notification, Warranty, FieldAuditEntry } from '../types'
+import { displayPhone } from '../lib/phone'
 
 export function RepairDetail() {
   const repairId = useAppStore((s) => s.selectedRepairId)
@@ -57,6 +58,7 @@ export function RepairDetail() {
   const [showAiComposer, setShowAiComposer] = useState(false)
   const [aiGoal, setAiGoal] = useState('')
   const [aiDraft, setAiDraft] = useState('')
+  const [aiSubject, setAiSubject] = useState('')
   const [aiDrafting, setAiDrafting] = useState(false)
   const [aiMode, setAiMode] = useState<'template' | 'freeform'>('template')
   const [aiSending, setAiSending] = useState(false)
@@ -64,6 +66,8 @@ export function RepairDetail() {
   const [customerHistory, setCustomerHistory] = useState('')
   const [historyLoading, setHistoryLoading] = useState(false)
   const [repairCount, setRepairCount] = useState(0)
+
+  const loadDataRef = useRef<() => Promise<void>>(async () => {})
 
   useEffect(() => {
     let cancelled = false
@@ -114,21 +118,41 @@ export function RepairDetail() {
         console.error('Failed to load repair data:', e)
       }
     }
+    loadDataRef.current = loadData
     loadData()
     api.technicians.list().then((t: Technician[]) => { if (!cancelled) setTechnicians(t) })
     return () => { cancelled = true }
   }, [repairId])
 
+  // Stable wrapper so handlers defined outside the effect can trigger a reload
+  // without depending on the effect's internal closure.
+  const loadData = () => loadDataRef.current?.()
+
+  // Individual customers get WhatsApp drafts, Business customers get Email drafts.
+  const messageChannel: 'whatsapp' | 'email' = data?.customer_type === 'business' ? 'email' : 'whatsapp'
+
+  // The AI is asked to format email drafts as "Subject: ...\n\n<body>".
+  // Split that out so we can show/send a separate subject field.
+  const parseDraft = (raw: string, channel: 'whatsapp' | 'email') => {
+    if (channel !== 'email') return { subject: '', body: raw }
+    const match = raw.match(/^Subject:\s*(.+?)\n+([\s\S]*)$/i)
+    if (match) return { subject: match[1].trim(), body: match[2].trim() }
+    return { subject: '', body: raw }
+  }
+
   const handleDraftWithAI = async () => {
     setAiMode('template')
     setAiGoal('')
     setAiDraft('')
+    setAiSubject('')
     setShowAiComposer(true)
     if (!repairId) return
     setAiDrafting(true)
     try {
-      const draft = await api.ai.draftMessage(repairId, 'template')
-      setAiDraft(draft)
+      const draft = await api.ai.draftMessage(repairId, 'template', messageChannel)
+      const { subject, body } = parseDraft(draft, messageChannel)
+      setAiSubject(subject)
+      setAiDraft(body)
     } catch (e: any) {
       setAiDraft(`Error: ${e}`)
     } finally {
@@ -140,8 +164,10 @@ export function RepairDetail() {
     if (!repairId) return
     setAiDrafting(true)
     try {
-      const draft = await api.ai.draftMessage(repairId, 'freeform', aiGoal)
-      setAiDraft(draft)
+      const draft = await api.ai.draftMessage(repairId, 'freeform', messageChannel, aiGoal)
+      const { subject, body } = parseDraft(draft, messageChannel)
+      setAiSubject(subject)
+      setAiDraft(body)
     } catch (e: any) {
       setAiDraft(`Error: ${e}`)
     } finally {
@@ -153,11 +179,16 @@ export function RepairDetail() {
     if (!repairId || !aiDraft.trim()) return
     setAiSending(true)
     try {
-      await api.ai.sendCustom(repairId, aiDraft)
+      if (messageChannel === 'email') {
+        const subject = aiSubject.trim() || `Update on your repair — ${repairId}`
+        await api.ai.sendCustomEmail(repairId, subject, aiDraft)
+      } else {
+        await api.ai.sendCustom(repairId, aiDraft)
+      }
       setShowAiComposer(false)
       loadData()
     } catch (e) {
-      console.error(e)
+      alert('Failed to send: ' + String(e))
     } finally {
       setAiSending(false)
     }
@@ -288,7 +319,11 @@ export function RepairDetail() {
     if (!repairId) return
     setSendingNotif(true)
     try {
-      await api.notifications.sendReady(repairId)
+      if (messageChannel === 'email') {
+        await api.notifications.sendReadyEmail(repairId)
+      } else {
+        await api.notifications.sendReady(repairId)
+      }
       loadData()
     } catch (e) {
       alert('Failed to send notification: ' + String(e))
@@ -308,6 +343,28 @@ export function RepairDetail() {
       alert('Failed to reopen: ' + String(e))
     } finally {
       setActionLoading(false)
+    }
+  }
+
+  const handleViewQuotation = async () => {
+    if (!repairId) return
+    try {
+      const paths = await api.pdf.generateQuotationPdf(repairId, false)
+      const customerPath = paths.split('\n')[0]
+      await api.pdf.openFile(customerPath)
+    } catch (e) {
+      alert(String(e))
+    }
+  }
+
+  const handleViewInvoice = async () => {
+    if (!repairId) return
+    try {
+      const paths = await api.pdf.generateInvoicePdf(repairId, false)
+      const customerPath = paths.split('\n')[0]
+      await api.pdf.openFile(customerPath)
+    } catch (e) {
+      alert(String(e))
     }
   }
 
@@ -347,7 +404,7 @@ export function RepairDetail() {
           <h2 className="text-lg font-semibold text-text-primary mb-3">Customer</h2>
           <div className="space-y-1 text-sm">
             <div className="text-text-primary font-medium">{data.customer_name}</div>
-            <div className="text-text-secondary">{data.customer_phone}</div>
+            <div className="text-text-secondary">{displayPhone(data.customer_phone)}</div>
             <div className="text-text-muted text-xs capitalize">{data.customer_type}</div>
           </div>
         </Card>
@@ -423,8 +480,8 @@ export function RepairDetail() {
                   </Button>
                 </>
               )}
-              <Button variant="secondary" onClick={async () => { try { await api.pdf.generateQuotationPdf(repairId, false) } catch (e) { alert(String(e)) } }}>
-                Reprint Quotation
+              <Button variant="secondary" onClick={handleViewQuotation}>
+                View Quotation
               </Button>
             </div>
           </div>
@@ -457,8 +514,8 @@ export function RepairDetail() {
             )}
 
             <div className="mt-2">
-              <Button variant="secondary" onClick={async () => { try { await api.pdf.generateInvoicePdf(repairId, false) } catch (e) { alert(String(e)) } }}>
-                Reprint Invoice
+              <Button variant="secondary" onClick={handleViewInvoice}>
+                View Invoice
               </Button>
             </div>
           </div>
@@ -519,7 +576,9 @@ export function RepairDetail() {
       {/* Phase 3+4: Notification Section */}
       {data.repair.status === 'Ready for Collection' && (
         <Card>
-          <h2 className="text-lg font-semibold text-text-primary mb-3">Notification</h2>
+          <h2 className="text-lg font-semibold text-text-primary mb-3">
+            Notification ({messageChannel === 'email' ? 'Email' : 'WhatsApp'})
+          </h2>
           {lastNotif ? (
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm">
@@ -538,7 +597,11 @@ export function RepairDetail() {
             </div>
           ) : (
             <div className="space-y-2">
-              <p className="text-sm text-text-muted">Notify the customer via WhatsApp.</p>
+              <p className="text-sm text-text-muted">
+                {messageChannel === 'email'
+                  ? 'Notify this business customer by email.'
+                  : 'Notify the customer via WhatsApp.'}
+              </p>
               <div className="flex gap-2">
                 <Button onClick={handleSendNotification} loading={sendingNotif}>
                   Send Fixed Template
@@ -554,8 +617,12 @@ export function RepairDetail() {
       {data.repair.status !== 'Ready for Collection' && (
         <Card>
           <h2 className="text-lg font-semibold text-text-primary mb-3">Message Customer</h2>
-          <p className="text-sm text-text-muted mb-4">Draft a custom WhatsApp message using AI assistance.</p>
-          <Button variant="secondary" onClick={() => { setAiMode('freeform'); setAiGoal(''); setAiDraft(''); setShowAiComposer(true) }}>
+          <p className="text-sm text-text-muted mb-4">
+            {messageChannel === 'email'
+              ? 'Draft a custom email using AI assistance.'
+              : 'Draft a custom WhatsApp message using AI assistance.'}
+          </p>
+          <Button variant="secondary" onClick={() => { setAiMode('freeform'); setAiGoal(''); setAiDraft(''); setAiSubject(''); setShowAiComposer(true) }}>
             Draft a Message
           </Button>
         </Card>
@@ -717,9 +784,10 @@ export function RepairDetail() {
         <div className="space-y-4">
           {data && (
             <div className="text-xs text-text-muted bg-bg-elevated rounded-lg p-3 space-y-1">
-              <div><span className="text-text-secondary">Customer:</span> {data.customer_name} ({data.customer_phone})</div>
+              <div><span className="text-text-secondary">Customer:</span> {data.customer_name} ({displayPhone(data.customer_phone)})</div>
               <div><span className="text-text-secondary">Device:</span> {data.repair.brand} {data.repair.model || ''}</div>
               <div><span className="text-text-secondary">Status:</span> {data.repair.status}</div>
+              <div><span className="text-text-secondary">Channel:</span> {messageChannel === 'email' ? 'Email' : 'WhatsApp'}</div>
             </div>
           )}
 
@@ -743,6 +811,14 @@ export function RepairDetail() {
 
           {aiDraft && !aiDrafting && (
             <div className="space-y-3">
+              {messageChannel === 'email' && (
+                <Input
+                  label="Subject"
+                  value={aiSubject}
+                  onChange={(e) => setAiSubject(e.target.value)}
+                  placeholder={`Update on your repair — ${repairId}`}
+                />
+              )}
               <Textarea
                 label="Drafted Message (editable)"
                 value={aiDraft}

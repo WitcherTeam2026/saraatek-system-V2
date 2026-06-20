@@ -73,6 +73,7 @@ export const api = {
       invoke<string>('generate_quotation_pdf_file', { repairId, saveAs }),
     generateInvoicePdf: (repairId: string, saveAs: boolean) =>
       invoke<string>('generate_invoice_pdf_file', { repairId, saveAs }),
+    openFile: (path: string) => invoke<void>('open_file_path', { path }),
   },
 
   technicians: {
@@ -92,6 +93,7 @@ export const api = {
 
   notifications: {
     sendReady: (repairId: string) => invoke<Notification>('send_ready_notification', { repairId }),
+    sendReadyEmail: (repairId: string) => invoke<Notification>('send_ready_email_notification', { repairId }),
     history: (repairId: string) => invoke<Notification[]>('get_notification_history', { repairId }),
   },
 
@@ -116,10 +118,12 @@ export const api = {
   },
 
   ai: {
-    draftMessage: (repairId: string, mode: string, goal?: string) =>
-      invoke<string>('draft_notification_message', { repairId, mode, goal: goal || null }),
+    draftMessage: (repairId: string, mode: string, channel: 'whatsapp' | 'email', goal?: string) =>
+      invoke<string>('draft_notification_message', { repairId, mode, goal: goal || null, channel }),
     sendCustom: (repairId: string, message: string) =>
       invoke<Notification>('send_custom_notification', { repairId, message }),
+    sendCustomEmail: (repairId: string, subject: string, message: string) =>
+      invoke<Notification>('send_custom_email', { repairId, subject, message }),
     summarizeHistory: (customerId: number) =>
       invoke<string>('summarize_customer_history', { customerId }),
   },

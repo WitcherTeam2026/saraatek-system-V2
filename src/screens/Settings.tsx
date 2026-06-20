@@ -15,6 +15,12 @@ export function Settings() {
   const [photosDir, setPhotosDir] = useState('')
   const [openrouterApiKey, setOpenrouterApiKey] = useState('')
   const [openrouterModel, setOpenrouterModel] = useState('meta-llama/llama-3.1-8b-instruct:free')
+  const [smtpHost, setSmtpHost] = useState('')
+  const [smtpPort, setSmtpPort] = useState('587')
+  const [smtpUsername, setSmtpUsername] = useState('')
+  const [smtpPassword, setSmtpPassword] = useState('')
+  const [smtpFromName, setSmtpFromName] = useState('SaraaTEK')
+  const [smtpFromEmail, setSmtpFromEmail] = useState('')
   const [technicians, setTechnicians] = useState<Technician[]>([])
   const [newTechName, setNewTechName] = useState('')
   const [newTechPhone, setNewTechPhone] = useState('')
@@ -36,6 +42,12 @@ export function Settings() {
         setPhotosDir(settings.photos_dir || '')
         setOpenrouterApiKey(settings.openrouter_api_key || '')
         setOpenrouterModel(settings.openrouter_model || 'meta-llama/llama-3.1-8b-instruct:free')
+        setSmtpHost(settings.smtp_host || '')
+        setSmtpPort(settings.smtp_port || '587')
+        setSmtpUsername(settings.smtp_username || '')
+        setSmtpPassword(settings.smtp_password || '')
+        setSmtpFromName(settings.smtp_from_name || 'SaraaTEK')
+        setSmtpFromEmail(settings.smtp_from_email || '')
       })
       .catch((e) => setLoadError('Failed to load settings: ' + String(e)))
     api.technicians.list()
@@ -58,9 +70,29 @@ export function Settings() {
         api.settings.save('openrouter_model', openrouterModel),
       ])
     } catch (e) {
-      alert('Failed to save settings: ' + String(e))
+      setError('Failed to save settings: ' + String(e))
     } finally {
       setSaving(false)
+    }
+  }
+
+  const [savingEmail, setSavingEmail] = useState(false)
+
+  const saveEmailSettings = async () => {
+    setSavingEmail(true)
+    try {
+      await Promise.all([
+        api.settings.save('smtp_host', smtpHost),
+        api.settings.save('smtp_port', smtpPort),
+        api.settings.save('smtp_username', smtpUsername),
+        api.settings.save('smtp_password', smtpPassword),
+        api.settings.save('smtp_from_name', smtpFromName),
+        api.settings.save('smtp_from_email', smtpFromEmail),
+      ])
+    } catch (e) {
+      setError('Failed to save email settings: ' + String(e))
+    } finally {
+      setSavingEmail(false)
     }
   }
 
@@ -72,7 +104,7 @@ export function Settings() {
       setNewTechName('')
       setNewTechPhone('')
     } catch (e) {
-      alert('Failed to add technician: ' + String(e))
+      setError('Failed to add technician: ' + String(e))
     }
   }
 
@@ -81,14 +113,15 @@ export function Settings() {
       await api.technicians.toggleActive(id)
       setTechnicians(technicians.map((t) => t.id === id ? { ...t, active: !t.active } : t))
     } catch (e) {
-      alert('Failed to toggle technician: ' + String(e))
+      setError('Failed to toggle technician: ' + String(e))
     }
   }
 
   return (
     <div className="space-y-6 max-w-2xl">
       <h1 className="text-2xl font-bold text-text-primary">Settings</h1>
-      {loadError && <div className="text-red-400 text-sm bg-red-400/10 rounded-lg p-3">{loadError}</div>}
+      {loadError && <ErrorBanner message={loadError} onClose={() => setLoadError('')} />}
+      {error && <ErrorBanner message={error} onClose={() => setError('')} />}
 
       <Card>
         <h2 className="text-lg font-semibold text-text-primary mb-4">Shop Information</h2>
@@ -117,7 +150,64 @@ export function Settings() {
             placeholder="e.g. 94"
           />
           <div className="text-xs text-text-muted">
-            Get your API token from the Fonnte dashboard.
+            Get your API token from the Fonnte dashboard. Used for Individual customers.
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <h2 className="text-lg font-semibold text-text-primary mb-4">Email (SMTP)</h2>
+        <p className="text-xs text-text-muted mb-4">
+          Used to message Business customers — quotation/invoice and ready-for-collection
+          notifications go out by email instead of WhatsApp for business accounts.
+        </p>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="SMTP Host"
+              value={smtpHost}
+              onChange={(e) => setSmtpHost(e.target.value)}
+              placeholder="smtp.gmail.com"
+            />
+            <Input
+              label="SMTP Port"
+              value={smtpPort}
+              onChange={(e) => setSmtpPort(e.target.value)}
+              placeholder="587"
+            />
+          </div>
+          <Input
+            label="SMTP Username"
+            value={smtpUsername}
+            onChange={(e) => setSmtpUsername(e.target.value)}
+            placeholder="saraatek25@gmail.com"
+          />
+          <Input
+            label="SMTP Password"
+            value={smtpPassword}
+            onChange={(e) => setSmtpPassword(e.target.value)}
+            placeholder="App password (not your normal login password)"
+            type="password"
+          />
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="From Name"
+              value={smtpFromName}
+              onChange={(e) => setSmtpFromName(e.target.value)}
+              placeholder="SaraaTEK"
+            />
+            <Input
+              label="From Email"
+              value={smtpFromEmail}
+              onChange={(e) => setSmtpFromEmail(e.target.value)}
+              placeholder="Leave empty to use SMTP username"
+            />
+          </div>
+          <Button onClick={saveEmailSettings} loading={savingEmail}>Save Email Settings</Button>
+          <div className="text-xs text-text-muted">
+            For Gmail, use port 587 and an{' '}
+            <span className="text-brand-purple">App Password</span> (Google Account → Security
+            → 2-Step Verification → App passwords) — your normal Gmail password will not work.
           </div>
         </div>
       </Card>

@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { api } from '../lib/api'
 import { Card } from '../components/Card'
-import { Button } from '../components/Button'
 import type { ReportsSummary } from '../types'
 
 type Preset = 'this-month' | 'last-month' | 'last-3-months' | 'this-year' | 'custom'

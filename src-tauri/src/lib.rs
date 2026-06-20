@@ -45,6 +45,8 @@ pub fn run() {
             commands::customers::search_customer,
             commands::customers::create_customer,
             commands::customers::update_customer_address,
+            commands::email::send_ready_email_notification,
+            commands::email::send_custom_email,
             commands::notifications::send_ready_notification,
             commands::notifications::get_notification_history,
             commands::payments::record_payment,
@@ -85,6 +87,7 @@ pub fn run() {
             pdf::generate_intake_pdf,
             pdf::generate_quotation_pdf_file,
             pdf::generate_invoice_pdf_file,
+            pdf::open_file_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

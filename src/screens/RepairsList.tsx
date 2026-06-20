@@ -7,6 +7,7 @@ import { Input } from '../components/Input'
 import { Button } from '../components/Button'
 import { ErrorBanner } from '../components/ErrorBanner'
 import type { RepairWithCustomer } from '../types'
+import { displayPhone } from '../lib/phone'
 
 const statusFilters = [
   { value: '', label: 'All Statuses' },
@@ -15,8 +16,10 @@ const statusFilters = [
   { value: 'Repairing', label: 'Repairing' },
   { value: 'Ready for Collection', label: 'Ready for Collection' },
   { value: 'Completed', label: 'Completed' },
+  { value: 'Completed — Under Warranty', label: 'Completed — Under Warranty' },
   { value: 'Declined', label: 'Declined' },
   { value: 'Cancelled', label: 'Cancelled' },
+  { value: 'Closed', label: 'Closed' },
 ]
 
 export function RepairsList() {
@@ -107,7 +110,7 @@ export function RepairsList() {
                 >
                   <td className="py-3 font-medium text-text-primary">{r.repair.id}</td>
                   <td className="py-3 text-text-secondary">{r.customer_name}</td>
-                  <td className="py-3 text-text-muted">{r.customer_phone}</td>
+                  <td className="py-3 text-text-muted">{displayPhone(r.customer_phone)}</td>
                   <td className="py-3 text-text-secondary">{r.repair.brand} {r.repair.model}</td>
                   <td className="py-3"><StatusBadge status={r.repair.status} /></td>
                   <td className="py-3 text-text-secondary">{r.technician_name || '-'}</td>

@@ -175,6 +175,7 @@ export interface Notification {
   status: string
   fonnte_response: string | null
   sent_at: string
+  channel: string
 }
 
 export interface Warranty {
