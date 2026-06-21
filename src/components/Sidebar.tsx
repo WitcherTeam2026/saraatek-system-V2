@@ -1,12 +1,32 @@
 import { useAppStore } from '../stores/app'
 
-const navItems = [
-  { screen: 'dashboard', label: 'Dashboard', icon: '◉' },
-  { screen: 'new-repair-step1', label: 'New Repair', icon: '+' },
-  { screen: 'repairs-list', label: 'All Repairs', icon: '☰' },
-  { screen: 'reports', label: 'Reports', icon: '📊' },
-  { screen: 'warranty-search', label: 'Warranty Claim', icon: '✓' },
-  { screen: 'settings', label: 'Settings', icon: '⚙' },
+// Grouped, ERP-style sidebar structure (per UI/UX roadmap doc).
+// "Business" docs (Quotations/Invoices/Payments) don't have dedicated
+// list screens yet — they're generated from within a repair — so for now
+// they route into Repairs List, which is where those actions live.
+// Dedicated Quotations/Invoices/Payments list screens are a separate
+// future roadmap item.
+const navGroups: { label: string | null; items: { screen: string; label: string; icon: string }[] }[] = [
+  {
+    label: null,
+    items: [{ screen: 'dashboard', label: 'Dashboard', icon: '◉' }],
+  },
+  {
+    label: 'Operations',
+    items: [
+      { screen: 'new-repair-step1', label: 'New Repair', icon: '+' },
+      { screen: 'repairs-list', label: 'Repairs', icon: '☰' },
+      { screen: 'warranty-search', label: 'Warranty Claims', icon: '✓' },
+    ],
+  },
+  {
+    label: 'Analytics',
+    items: [{ screen: 'reports', label: 'Reports', icon: '📊' }],
+  },
+  {
+    label: 'System',
+    items: [{ screen: 'settings', label: 'Settings', icon: '⚙' }],
+  },
 ]
 
 export function Sidebar() {
@@ -24,20 +44,29 @@ export function Sidebar() {
           </div>
         </div>
       </div>
-      <nav className="flex-1 p-2 space-y-1">
-        {navItems.map((item) => (
-          <button
-            key={item.screen}
-            onClick={() => navigate(item.screen)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-              currentScreen === item.screen
-                ? 'bg-brand-purple/20 text-brand-purple'
-                : 'text-text-secondary hover:bg-bg-elevated hover:text-text-primary'
-            }`}
-          >
-            <span className="text-lg">{item.icon}</span>
-            {item.label}
-          </button>
+      <nav className="flex-1 p-2 space-y-4 overflow-y-auto">
+        {navGroups.map((group, idx) => (
+          <div key={idx} className="space-y-1">
+            {group.label && (
+              <div className="px-3 pt-1 pb-1 text-[10px] font-semibold tracking-wider text-text-muted uppercase">
+                {group.label}
+              </div>
+            )}
+            {group.items.map((item) => (
+              <button
+                key={item.screen}
+                onClick={() => navigate(item.screen)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                  currentScreen === item.screen
+                    ? 'bg-brand-purple/20 text-brand-purple'
+                    : 'text-text-secondary hover:bg-bg-elevated hover:text-text-primary'
+                }`}
+              >
+                <span className="text-lg">{item.icon}</span>
+                {item.label}
+              </button>
+            ))}
+          </div>
         ))}
       </nav>
     </aside>

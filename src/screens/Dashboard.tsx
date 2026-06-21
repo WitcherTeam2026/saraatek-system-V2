@@ -8,12 +8,18 @@ import { Button } from '../components/Button'
 import { ErrorBanner } from '../components/ErrorBanner'
 import type { RepairWithCustomer } from '../types'
 
+function toDateStr(d: Date) {
+  return d.toISOString().split('T')[0]
+}
+
 export function Dashboard() {
   const navigate = useAppStore((s) => s.navigate)
   const [counts, setCounts] = useState({ open_repairs: 0, awaiting_approval: 0, repairing: 0, ready_for_collection: 0 })
   const [recentRepairs, setRecentRepairs] = useState<RepairWithCustomer[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<RepairWithCustomer[] | null>(null)
+  const [revenueToday, setRevenueToday] = useState<number | null>(null)
+  const [revenueMonth, setRevenueMonth] = useState<number | null>(null)
   const mounted = useRef(true)
   const [error, setError] = useState('')
 
@@ -21,6 +27,18 @@ export function Dashboard() {
     mounted.current = true
     api.repairs.dashboardCounts().then((c) => { if (mounted.current) setCounts(c) }).catch((e) => setError('Failed to load counts: ' + String(e)))
     api.repairs.list({ sort_by: 'received_at', sort_order: 'desc' }).then((r) => { if (mounted.current) setRecentRepairs(r.slice(0, 10)) }).catch((e) => setError('Failed to load repairs: ' + String(e)))
+
+    const today = new Date()
+    const todayStr = toDateStr(today)
+    const monthStart = toDateStr(new Date(today.getFullYear(), today.getMonth(), 1))
+
+    api.reports.summary(todayStr, todayStr, false)
+      .then((r) => { if (mounted.current) setRevenueToday(r.revenue.total) })
+      .catch(() => { /* non-critical, leave as loading */ })
+    api.reports.summary(monthStart, todayStr, false)
+      .then((r) => { if (mounted.current) setRevenueMonth(r.revenue.total) })
+      .catch(() => { /* non-critical, leave as loading */ })
+
     return () => { mounted.current = false }
   }, [])
 
@@ -54,6 +72,21 @@ export function Dashboard() {
             <div className={`text-3xl font-bold mt-1 ${card.color}`}>{card.value}</div>
           </Card>
         ))}
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <Card>
+          <div className="text-sm text-text-secondary">Revenue Today</div>
+          <div className="text-3xl font-bold mt-1 text-accent-green">
+            {revenueToday === null ? '—' : `Rs. ${revenueToday.toLocaleString()}`}
+          </div>
+        </Card>
+        <Card>
+          <div className="text-sm text-text-secondary">Revenue This Month</div>
+          <div className="text-3xl font-bold mt-1 text-accent-green">
+            {revenueMonth === null ? '—' : `Rs. ${revenueMonth.toLocaleString()}`}
+          </div>
+        </Card>
       </div>
 
       <div className="relative">
