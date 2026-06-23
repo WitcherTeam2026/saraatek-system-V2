@@ -147,8 +147,8 @@ pub(crate) fn create_repair_inner(
     ).map_err(|e| e.to_string())?;
 
     conn.execute(
-        "INSERT INTO repair_history (repair_id, status, note) VALUES (?, 'Received', ?)",
-        rusqlite::params![repair_id, Option::<String>::None],
+        "INSERT INTO repair_history (repair_id, status, note, changed_at) VALUES (?, 'Received', ?, ?)",
+        rusqlite::params![repair_id, Option::<String>::None, now],
     )
     .map_err(|e| e.to_string())?;
 
@@ -315,6 +315,7 @@ pub(crate) fn update_repair_status_inner(
     input: &UpdateStatusInput,
 ) -> Result<(), String> {
     let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    println!("Updating repair status: repair_id={}, new_status={}", input.repair_id, input.new_status);
 
     conn.execute(
         "UPDATE repairs SET status = ?, updated_at = ? WHERE id = ?",
@@ -322,9 +323,10 @@ pub(crate) fn update_repair_status_inner(
     )
     .map_err(|e| e.to_string())?;
 
+    println!("Inserting repair history for repair_id={}", input.repair_id);
     conn.execute(
-        "INSERT INTO repair_history (repair_id, status, note) VALUES (?, ?, ?)",
-        rusqlite::params![input.repair_id, input.new_status, input.note],
+        "INSERT INTO repair_history (repair_id, status, note, changed_at) VALUES (?, ?, ?, ?)",
+        rusqlite::params![input.repair_id, input.new_status, input.note, now],
     )
     .map_err(|e| e.to_string())?;
 
@@ -336,6 +338,7 @@ pub(crate) fn update_repair_status_inner(
         .map_err(|e| e.to_string())?;
     }
 
+    println!("Status update completed successfully");
     Ok(())
 }
 

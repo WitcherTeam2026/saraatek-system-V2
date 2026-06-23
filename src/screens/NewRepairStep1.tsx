@@ -64,13 +64,21 @@ export function NewRepairStep1() {
   }
 
   const handleContinue = async () => {
-    if (!name.trim() || phone.length < 3) return
+    if (!name.trim()) {
+      setError('Please enter customer name')
+      return
+    }
+    if (phone.length < 3) {
+      setPhoneError('Please enter a phone number')
+      return
+    }
     const formattedPhone = formatSriLankanPhone(phone)
     if (!formattedPhone) {
       setPhoneError('Enter a valid Sri Lankan number, e.g. 0771234567 or +94 77 123 4567')
       return
     }
     setPhoneError('')
+    setError('')
     setCreating(true)
     try {
       let customerId: number
@@ -86,6 +94,7 @@ export function NewRepairStep1() {
           phone: formattedPhone,
           email: email || null,
           company_name: customerType === 'business' ? companyName : null,
+          address: address.trim() || null,
         })
         customerId = customer.id
         if (address.trim()) {

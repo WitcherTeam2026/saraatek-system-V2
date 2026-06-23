@@ -2,6 +2,19 @@ use crate::db::Database;
 use printpdf::*;
 use rusqlite::params;
 use std::fs;
+use serde::{Deserialize, Serialize};
+use tera::{Context, Tera};
+
+/// Customer and device info fetched from the database for PDF generation.
+type CustomerDeviceRow = (
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    String,
+    Option<String>,
+);
 
 const PAGE_W: f32 = 210.0;
 const PAGE_H: f32 = 297.0;
@@ -205,7 +218,6 @@ fn draw_header(ops: &mut Vec<Op>, shop_name: &str, tagline: &str, y: &mut f32) {
         items: vec![TextItem::Text(quoted)],
     });
     ops.push(Op::EndTextSection);
-
     ops.push(Op::SetFillColor {
         col: Color::Rgb(rgb(0.0, 0.0, 0.0)),
     });
@@ -1822,15 +1834,7 @@ fn build_quotation_pdf_data(
         device_type,
         device_brand,
         device_model,
-    ): (
-        String,
-        String,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        String,
-        Option<String>,
-    ) = conn
+    ): CustomerDeviceRow = conn
         .query_row(
             "SELECT c.name, c.phone, c.email, c.address, r.device_type, r.brand, r.model
              FROM repairs r JOIN customers c ON r.customer_id = c.id WHERE r.id = ?",
@@ -2027,6 +2031,312 @@ pub fn generate_invoice_pdf_file(
     generate_invoice_pdf(&data, &shop_path)?;
 
     Ok(format!("{}\n{}", customer_path, shop_path))
+}
+
+// ============================================================
+// HTML Template-based PDF Generation (new approach)
+// ============================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InvoiceItem {
+    pub description: String,
+    pub device: String,
+    pub serial: String,
+    pub price: String,
+    pub qty: String,
+    pub total: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PdfTemplateData {
+    pub doc_type: String,
+    pub repair_id: String,
+    pub date: String,
+    pub company_name: String,
+    pub company_address: String,
+    pub company_email: String,
+    pub company_phone: String,
+    pub bank_name: String,
+    pub bank_account_name: String,
+    pub bank_account_number: String,
+    pub bank_branch: String,
+    pub items: Vec<InvoiceItem>,
+    pub currency: String,
+    pub grand_total: String,
+    pub customer_name: String,
+    pub customer_address: String,
+    pub customer_phone: String,
+}
+
+fn find_chrome() -> Option<String> {
+    let paths = [
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Chromium\Application\chrome.exe",
+        r"C:\Program Files (x86)\Chromium\Application\chrome.exe",
+        r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+    ];
+    for path in &paths {
+        if std::path::Path::new(path).exists() {
+            return Some(path.to_string());
+        }
+    }
+    // Try where command for common browsers
+    for exe in &["msedge.exe", "chrome.exe", "brave.exe"] {
+        if let Ok(output) = std::process::Command::new("where").arg(exe).output() {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                if let Some(first_line) = stdout.lines().next() {
+                    let path = first_line.trim().to_string();
+                    if !path.is_empty() && std::path::Path::new(&path).exists() {
+                        return Some(path);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn render_html_to_pdf(html: &str, output_path: &str) -> Result<(), String> {
+    let chrome = find_chrome()
+        .ok_or("No Chrome/Edge browser found. Please install Google Chrome or Microsoft Edge.")?;
+    
+    let output_dir = std::path::Path::new(output_path)
+        .parent()
+        .ok_or("Invalid output path")?;
+    let temp_html = output_dir.join("saraatek_render.html");
+    let temp_pdf = output_dir.join("saraatek_render.pdf");
+    
+    let _ = fs::remove_file(&temp_html);
+    let _ = fs::remove_file(&temp_pdf);
+    
+    fs::write(&temp_html, html).map_err(|e| format!("Failed to write temp HTML: {}", e))?;
+    
+    if !temp_html.exists() {
+        return Err(format!("Temp HTML not created at: {}", temp_html.display()));
+    }
+    
+    let pdf_arg = format!("--print-to-pdf={}", temp_pdf.to_str().unwrap_or(""));
+    let html_str = temp_html.to_str().unwrap_or("");
+    
+    let output = std::process::Command::new(&chrome)
+        .args([
+            "--headless",
+            "--disable-gpu",
+            "--no-sandbox",
+            "--disable-software-rasterizer",
+            &pdf_arg,
+            "--print-to-pdf-no-header",
+            "--no-pdf-header-footer",
+            html_str,
+        ])
+        .output()
+        .map_err(|e| format!("Failed to run Chrome: {}", e))?;
+    
+    std::thread::sleep(std::time::Duration::from_millis(2000));
+    
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        return Err(format!("Chrome PDF failed: stdout={} stderr={}", stdout, stderr));
+    }
+    
+    if temp_pdf.exists() && temp_pdf.metadata().map(|m| m.len() > 100).unwrap_or(false) {
+        fs::copy(&temp_pdf, output_path)
+            .map_err(|e| format!("Failed to copy PDF to output: {}", e))?;
+        let _ = fs::remove_file(&temp_pdf);
+    } else {
+        let size = temp_pdf.metadata().map(|m| m.len()).unwrap_or(0);
+        return Err(format!("PDF not generated or empty ({} bytes)", size));
+    }
+    let _ = fs::remove_file(&temp_html);
+    Ok(())
+}
+
+fn get_pdf_setting(conn: &rusqlite::Connection, key: &str, default: &str) -> String {
+    conn.query_row(
+        "SELECT setting_value FROM pdf_template_settings WHERE setting_key = ?",
+        rusqlite::params![key],
+        |row| row.get::<_, String>(0),
+    )
+    .unwrap_or_else(|_| default.to_string())
+}
+
+fn build_template_data(repair_id: &str, db: &Database, doc_type: &str) -> Result<PdfTemplateData, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    let (customer_name, customer_phone, customer_address, device_type, device_brand, device_model, device_serial, reported_problem): (String, String, Option<String>, Option<String>, String, Option<String>, Option<String>, Option<String>) = conn
+        .query_row(
+            "SELECT c.name, c.phone, c.address, r.device_type, r.brand, r.model, r.serial_number, r.reported_problem
+             FROM repairs r JOIN customers c ON r.customer_id = c.id WHERE r.id = ?",
+            rusqlite::params![repair_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<String>>(6)?,
+                    row.get::<_, Option<String>>(7)?,
+                ))
+            },
+        )
+        .map_err(|e| e.to_string())?;
+
+    let quotation_no = repair_id.replace('/', "-");
+
+    let items = vec![InvoiceItem {
+        description: reported_problem.unwrap_or_else(|| "Repair Service".to_string()),
+        device: format!("{} {} {}", device_type.unwrap_or_default(), device_brand, device_model.unwrap_or_default()),
+        serial: device_serial.unwrap_or_default(),
+        price: "0.00".to_string(),
+        qty: "1".to_string(),
+        total: "0.00".to_string(),
+    }];
+
+    Ok(PdfTemplateData {
+        doc_type: doc_type.to_string(),
+        repair_id: quotation_no,
+        date: chrono::Local::now().format("%Y-%m-%d").to_string(),
+        company_name: get_pdf_setting(&conn, "company_name", "saraa TEK"),
+        company_address: get_pdf_setting(&conn, "company_address", "539/8 Madamandiya, Dedigamuwa"),
+        company_email: get_pdf_setting(&conn, "company_email", "saraatek25@gmail.com"),
+        company_phone: get_pdf_setting(&conn, "company_phone", "+94 72 2828 100"),
+        bank_name: get_pdf_setting(&conn, "bank_name", "Commercial Bank"),
+        bank_account_name: get_pdf_setting(&conn, "bank_account_name", "N.G.C.N Ariyarathna"),
+        bank_account_number: get_pdf_setting(&conn, "bank_account_number", "8117011598"),
+        bank_branch: get_pdf_setting(&conn, "bank_branch", "Pitakotte"),
+        items,
+        currency: "LKR".to_string(),
+        grand_total: "0.00".to_string(),
+        customer_name,
+        customer_address: customer_address.unwrap_or_default(),
+        customer_phone,
+    })
+}
+
+fn render_template(template_name: &str, data: &PdfTemplateData) -> Result<String, String> {
+    let template_dir = std::env::temp_dir().join("saraatek_templates");
+    fs::create_dir_all(&template_dir).map_err(|e| e.to_string())?;
+
+    let invoice_html = include_str!("../templates/invoice.html");
+    let quotation_html = include_str!("../templates/quotation.html");
+    fs::write(template_dir.join("invoice.html"), invoice_html).map_err(|e| e.to_string())?;
+    fs::write(template_dir.join("quotation.html"), quotation_html).map_err(|e| e.to_string())?;
+
+    let tera = Tera::new(template_dir.join("*.html").to_str().unwrap())
+        .map_err(|e| format!("Template load error: {}", e))?;
+
+    let mut context = Context::new();
+    context.insert("doc_type", &data.doc_type);
+    context.insert("repair_id", &data.repair_id);
+    context.insert("date", &data.date);
+    context.insert("company_name", &data.company_name);
+    context.insert("company_address", &data.company_address);
+    context.insert("company_email", &data.company_email);
+    context.insert("company_phone", &data.company_phone);
+    context.insert("bank_name", &data.bank_name);
+    context.insert("bank_account_name", &data.bank_account_name);
+    context.insert("bank_account_number", &data.bank_account_number);
+    context.insert("bank_branch", &data.bank_branch);
+    context.insert("item_1_desc", &data.items.get(0).map(|i| i.description.clone()).unwrap_or_default());
+    context.insert("item_1_price", &data.items.get(0).map(|i| i.price.clone()).unwrap_or_default());
+    context.insert("item_1_qty", &data.items.get(0).map(|i| i.qty.clone()).unwrap_or_default());
+    context.insert("device_1", &data.items.get(0).map(|i| i.device.clone()).unwrap_or_default());
+    context.insert("device_sn_1", &data.items.get(0).map(|i| i.serial.clone()).unwrap_or_default());
+    context.insert("item_2_desc", &data.items.get(1).map(|i| i.description.clone()).unwrap_or_default());
+    context.insert("item_2_price", &data.items.get(1).map(|i| i.price.clone()).unwrap_or_default());
+    context.insert("item_2_qty", &data.items.get(1).map(|i| i.qty.clone()).unwrap_or_default());
+    context.insert("device_2", &data.items.get(1).map(|i| i.device.clone()).unwrap_or_default());
+    context.insert("device_sn_2", &data.items.get(1).map(|i| i.serial.clone()).unwrap_or_default());
+    context.insert("currency", &data.currency);
+    context.insert("grand_total", &data.grand_total);
+    context.insert("customer_name", &data.customer_name);
+    context.insert("customer_address", &data.customer_address);
+    context.insert("customer_phone", &data.customer_phone);
+
+    let rendered = tera.render(template_name, &context)
+        .map_err(|e| format!("Template render error: {}", e))?;
+
+    let chrome_overrides = r#"<style>
+@page {
+  size: 595.28pt 841.89pt;
+  margin: 0 !important;
+}
+html, body {
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  overflow: hidden !important;
+}
+.pdf24_view {
+  font-size: 1em !important;
+  transform: scale(1) !important;
+  -webkit-transform: scale(1) !important;
+  transform-origin: top left !important;
+  -webkit-transform-origin: top left !important;
+}
+body > div {
+  box-shadow: none !important;
+  margin: 0 !important;
+}
+.pdf24_10, .pdf24_12, .pdf24_14, .pdf24_18, .pdf24_20, .pdf24_22,
+.pdf24_24, .pdf24_28, .pdf24_31, .pdf24_36, .pdf24_38, .pdf24_40,
+.pdf24_45, .pdf24_47, .pdf24_57, .pdf24_60, .pdf24_63, .pdf24_67,
+.pdf24_69, .pdf24_70, .pdf24_72 {
+  font-family: "Segoe UI", Arial, Helvetica, sans-serif !important;
+}
+.pdf24_18, .pdf24_20, .pdf24_22 {
+  text-align: center !important;
+}
+.pdf24_01 {
+  position: absolute !important;
+  white-space: nowrap !important;
+}
+img {
+  image-rendering: high-quality !important;
+}
+</style>"#;
+
+    let result = rendered.replace("</head>", &format!("{}{}", chrome_overrides, "</head>"));
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn generate_quotation_pdf_html(
+    repair_id: String,
+    save_as: bool,
+    db: tauri::State<Database>,
+    app: tauri::AppHandle,
+) -> Result<String, String> {
+    let data = build_template_data(&repair_id, db.inner(), "QUOTATION")?;
+    let html = render_template("quotation.html", &data)?;
+    let output_dir = resolve_output_dir(db.inner(), &app, save_as)?;
+    let safe_id = repair_id.replace('/', "-");
+    let path = format!("{}/QUO_{}.pdf", output_dir, safe_id);
+    render_html_to_pdf(&html, &path)?;
+    Ok(path)
+}
+
+#[tauri::command]
+pub fn generate_invoice_pdf_html(
+    repair_id: String,
+    save_as: bool,
+    db: tauri::State<Database>,
+    app: tauri::AppHandle,
+) -> Result<String, String> {
+    let data = build_template_data(&repair_id, db.inner(), "INVOICE")?;
+    let html = render_template("invoice.html", &data)?;
+    let output_dir = resolve_output_dir(db.inner(), &app, save_as)?;
+    let safe_id = repair_id.replace('/', "-");
+    let path = format!("{}/INV_{}.pdf", output_dir, safe_id);
+    render_html_to_pdf(&html, &path)?;
+    Ok(path)
 }
 
 #[cfg(test)]

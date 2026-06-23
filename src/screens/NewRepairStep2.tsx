@@ -48,7 +48,18 @@ export function NewRepairStep2() {
   const [error, setError] = useState('')
 
   const handleSave = async () => {
-    if (!brand.trim() || !reportedProblem.trim() || customerId === null) return
+    if (!brand.trim()) {
+      setError('Please enter device brand')
+      return
+    }
+    if (!reportedProblem.trim()) {
+      setError('Please enter the reported problem')
+      return
+    }
+    if (customerId === null) {
+      setError('Customer not found. Please go back and select a customer.')
+      return
+    }
     setSaving(true)
     try {
       await api.repairs.create({

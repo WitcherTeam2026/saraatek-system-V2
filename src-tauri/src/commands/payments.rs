@@ -27,6 +27,7 @@ pub(crate) fn record_payment_inner(
     input: &RecordPaymentInput,
 ) -> Result<Payment, String> {
     let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let today = Local::now().format("%Y-%m-%d").to_string();
 
     conn.execute(
         "INSERT INTO payments (repair_id, amount, method, paid_at, note) VALUES (?, ?, ?, ?, ?)",
@@ -35,6 +36,48 @@ pub(crate) fn record_payment_inner(
     .map_err(|e| e.to_string())?;
 
     let id = conn.last_insert_rowid();
+
+    // Create journal entry: Dr Cash/Bank, Cr Repair Revenue
+    let asset_account_code = match input.method.as_str() {
+        "cash" => "1000",
+        _ => "1100", // bank_transfer, card, etc.
+    };
+
+    let asset_account_id: i64 = conn
+        .query_row(
+            "SELECT id FROM chart_of_accounts WHERE code = ?",
+            rusqlite::params![asset_account_code],
+            |row| row.get(0),
+        )
+        .map_err(|e| format!("Account {} not found: {}", asset_account_code, e))?;
+
+    let revenue_account_id: i64 = conn
+        .query_row(
+            "SELECT id FROM chart_of_accounts WHERE code = '4000'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| format!("Revenue account not found: {}", e))?;
+
+    conn.execute(
+        "INSERT INTO journal_entries (entry_date, description, source_type, source_id, is_posted) VALUES (?1, ?2, 'payment', ?3, 1)",
+        rusqlite::params![today, format!("Payment received for {}", input.repair_id), input.repair_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    let entry_id = conn.last_insert_rowid();
+
+    conn.execute(
+        "INSERT INTO journal_items (entry_id, account_id, debit, credit, note) VALUES (?1, ?2, ?3, 0, ?4)",
+        rusqlite::params![entry_id, asset_account_id, input.amount, "Cash received"],
+    )
+    .map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "INSERT INTO journal_items (entry_id, account_id, debit, credit, note) VALUES (?1, ?2, 0, ?3, ?4)",
+        rusqlite::params![entry_id, revenue_account_id, input.amount, "Repair revenue"],
+    )
+    .map_err(|e| e.to_string())?;
 
     let has_warranty: bool = conn
         .query_row(
@@ -55,7 +98,7 @@ pub(crate) fn record_payment_inner(
     };
 
     let note = format!(
-        "Payment recorded: RM {:.2} via {}",
+        "Payment recorded: LKR {:.2} via {}",
         input.amount, input.method
     );
     conn.execute(

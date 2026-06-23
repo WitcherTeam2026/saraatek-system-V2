@@ -4,7 +4,6 @@ import { Card } from '../components/Card'
 import { Input, Textarea } from '../components/Input'
 import { Button } from '../components/Button'
 import { ErrorBanner } from '../components/ErrorBanner'
-import type { Technician } from '../types'
 
 export function Settings() {
   const [shopName, setShopName] = useState('')
@@ -15,15 +14,15 @@ export function Settings() {
   const [photosDir, setPhotosDir] = useState('')
   const [openrouterApiKey, setOpenrouterApiKey] = useState('')
   const [openrouterModel, setOpenrouterModel] = useState('meta-llama/llama-3.1-8b-instruct:free')
+  const [geminiApiKey, setGeminiApiKey] = useState('')
+  const [geminiModel, setGeminiModel] = useState('gemini-2.0-flash')
   const [smtpHost, setSmtpHost] = useState('')
   const [smtpPort, setSmtpPort] = useState('587')
   const [smtpUsername, setSmtpUsername] = useState('')
   const [smtpPassword, setSmtpPassword] = useState('')
   const [smtpFromName, setSmtpFromName] = useState('SaraaTEK')
   const [smtpFromEmail, setSmtpFromEmail] = useState('')
-  const [technicians, setTechnicians] = useState<Technician[]>([])
-  const [newTechName, setNewTechName] = useState('')
-  const [newTechPhone, setNewTechPhone] = useState('')
+
   const [saving, setSaving] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [error, setError] = useState('')
@@ -42,6 +41,8 @@ export function Settings() {
         setPhotosDir(settings.photos_dir || '')
         setOpenrouterApiKey(settings.openrouter_api_key || '')
         setOpenrouterModel(settings.openrouter_model || 'meta-llama/llama-3.1-8b-instruct:free')
+        setGeminiApiKey(settings.gemini_api_key || '')
+        setGeminiModel(settings.gemini_model || 'gemini-2.0-flash')
         setSmtpHost(settings.smtp_host || '')
         setSmtpPort(settings.smtp_port || '587')
         setSmtpUsername(settings.smtp_username || '')
@@ -50,9 +51,6 @@ export function Settings() {
         setSmtpFromEmail(settings.smtp_from_email || '')
       })
       .catch((e) => setLoadError('Failed to load settings: ' + String(e)))
-    api.technicians.list()
-      .then((t: Technician[]) => { if (mounted.current) setTechnicians(t) })
-      .catch((e) => setLoadError('Failed to load technicians: ' + String(e)))
     return () => { mounted.current = false }
   }, [])
 
@@ -68,6 +66,8 @@ export function Settings() {
         api.settings.save('photos_dir', photosDir),
         api.settings.save('openrouter_api_key', openrouterApiKey),
         api.settings.save('openrouter_model', openrouterModel),
+        api.settings.save('gemini_api_key', geminiApiKey),
+        api.settings.save('gemini_model', geminiModel),
       ])
     } catch (e) {
       setError('Failed to save settings: ' + String(e))
@@ -96,26 +96,7 @@ export function Settings() {
     }
   }
 
-  const addTechnician = async () => {
-    if (!newTechName.trim()) return
-    try {
-      const tech = await api.technicians.create(newTechName.trim(), newTechPhone.trim() || undefined)
-      setTechnicians([...technicians, tech])
-      setNewTechName('')
-      setNewTechPhone('')
-    } catch (e) {
-      setError('Failed to add technician: ' + String(e))
-    }
-  }
 
-  const toggleTech = async (id: number) => {
-    try {
-      await api.technicians.toggleActive(id)
-      setTechnicians(technicians.map((t) => t.id === id ? { ...t, active: !t.active } : t))
-    } catch (e) {
-      setError('Failed to toggle technician: ' + String(e))
-    }
-  }
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -228,46 +209,23 @@ export function Settings() {
       </Card>
 
       <Card>
-        <h2 className="text-lg font-semibold text-text-primary mb-4">AI Assistant (OpenRouter)</h2>
+        <h2 className="text-lg font-semibold text-text-primary mb-4">AI Assistant</h2>
+        <p className="text-xs text-text-muted mb-4">
+          AI powers the chatbot assistant. Uses OpenCode Zen MiMo-V2.5 (free, no API key needed).
+        </p>
         <div className="space-y-4">
-          <Input
-            label="OpenRouter API Token"
-            value={openrouterApiKey}
-            onChange={(e) => setOpenrouterApiKey(e.target.value)}
-            placeholder="sk-or-v1-..."
-            type="password"
-          />
-          <Input
-            label="Model Name"
-            value={openrouterModel}
-            onChange={(e) => setOpenrouterModel(e.target.value)}
-            placeholder="meta-llama/llama-3.1-8b-instruct:free"
-          />
-          <div className="text-xs text-text-muted">
-            Get your API key from <span className="text-brand-purple">openrouter.ai/keys</span>. Free models are available.
-          </div>
-        </div>
-      </Card>
-
-      <Card>
-        <h2 className="text-lg font-semibold text-text-primary mb-4">Technicians</h2>
-        <div className="space-y-3 mb-4">
-          {technicians.map((tech) => (
-            <div key={tech.id} className="flex items-center justify-between py-2 border-b border-border-default last:border-0">
-              <div>
-                <div className={`text-sm font-medium ${tech.active ? 'text-text-primary' : 'text-text-muted'}`}>{tech.name}</div>
-                {tech.phone && <div className="text-xs text-text-muted">{tech.phone}</div>}
-              </div>
-              <Button variant={tech.active ? 'secondary' : 'ghost'} onClick={() => toggleTech(tech.id)}>
-                {tech.active ? 'Active' : 'Inactive'}
-              </Button>
+          <div className="border border-white/10 rounded-lg p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <h3 className="text-sm font-medium text-emerald-400">OpenCode Zen (Active)</h3>
             </div>
-          ))}
-        </div>
-        <div className="flex gap-3">
-          <Input placeholder="Technician name" value={newTechName} onChange={(e) => setNewTechName(e.target.value)} className="flex-1" />
-          <Input placeholder="Phone (optional)" value={newTechPhone} onChange={(e) => setNewTechPhone(e.target.value)} className="flex-1" />
-          <Button onClick={addTechnician}>Add</Button>
+            <p className="text-xs text-text-primary">
+              Model: MiMo-V2.5 Free
+            </p>
+            <p className="text-xs text-text-muted">
+              Free, no API key required. Powered by OpenCode Zen.
+            </p>
+          </div>
         </div>
       </Card>
     </div>

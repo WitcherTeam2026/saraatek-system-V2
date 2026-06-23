@@ -99,7 +99,7 @@ export function Reports() {
           <div className="grid grid-cols-2 gap-6">
             <Card>
               <h2 className="text-lg font-semibold text-text-primary mb-2">Revenue</h2>
-              <div className="text-3xl font-bold text-brand-purple">RM {data.revenue.total.toFixed(2)}</div>
+              <div className="text-3xl font-bold text-brand-purple">LKR {data.revenue.total.toFixed(2)}</div>
               <div className="text-xs text-text-muted mb-4">{data.revenue.count} payment(s)</div>
               {data.revenue.monthly.length > 0 && (
                 <div className="space-y-1.5">
@@ -109,7 +109,7 @@ export function Reports() {
                       <div className="flex-1 h-4 bg-bg-elevated rounded-full overflow-hidden">
                         <div className="h-full bg-brand-purple rounded-full transition-all" style={{ width: `${(m.amount / maxRevenue) * 100}%` }} />
                       </div>
-                      <span className="w-20 text-right text-text-primary font-medium">RM {m.amount.toFixed(2)}</span>
+                      <span className="w-20 text-right text-text-primary font-medium">LKR {m.amount.toFixed(2)}</span>
                     </div>
                   ))}
                 </div>
@@ -120,7 +120,7 @@ export function Reports() {
                   {data.revenue.by_method.map((m) => (
                     <div key={m.method} className="flex justify-between text-xs">
                       <span className="text-text-secondary capitalize">{m.method}</span>
-                      <span className="text-text-primary">RM {m.amount.toFixed(2)}</span>
+                      <span className="text-text-primary">LKR {m.amount.toFixed(2)}</span>
                     </div>
                   ))}
                 </div>
@@ -191,7 +191,7 @@ export function Reports() {
                         <td className="py-2 px-2">{t.repairs_assigned}</td>
                         <td className="py-2 px-2">{t.repairs_completed}</td>
                         <td className="py-2 px-2">{t.avg_days > 0 ? t.avg_days.toFixed(1) : '-'}</td>
-                        <td className="py-2 px-2">RM {t.total_revenue.toFixed(2)}</td>
+                        <td className="py-2 px-2">LKR {t.total_revenue.toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>

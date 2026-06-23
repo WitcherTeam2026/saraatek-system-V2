@@ -9,7 +9,7 @@ import { Modal } from '../components/Modal'
 import { PaymentModal } from '../components/PaymentModal'
 import { open } from '@tauri-apps/plugin-dialog'
 import { VALID_STATUS_TRANSITIONS, STATUS_CONFIG } from '../types'
-import type { RepairWithCustomer, RepairHistory, Technician, QuotationWithItems, QuotationItem, Payment, Photo, Notification, Warranty, FieldAuditEntry } from '../types'
+import type { RepairWithCustomer, RepairHistory, QuotationWithItems, QuotationItem, Payment, Photo, Notification, Warranty, FieldAuditEntry } from '../types'
 import { displayPhone } from '../lib/phone'
 
 export function RepairDetail() {
@@ -18,7 +18,6 @@ export function RepairDetail() {
 
   const [data, setData] = useState<RepairWithCustomer | null>(null)
   const [history, setHistory] = useState<RepairHistory[]>([])
-  const [technicians, setTechnicians] = useState<Technician[]>([])
 
   const [techFindings, setTechFindings] = useState('')
   const [recommendedAction, setRecommendedAction] = useState('')
@@ -26,7 +25,6 @@ export function RepairDetail() {
   const [estimatedCost, setEstimatedCost] = useState('')
   const [repairNotes, setRepairNotes] = useState('')
   const [partsUsed, setPartsUsed] = useState('')
-  const [technicianId, setTechnicianId] = useState<number | null>(null)
 
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [selectedStatus, setSelectedStatus] = useState('')
@@ -84,7 +82,6 @@ export function RepairDetail() {
           setEstimatedCost(r.repair.estimated_cost?.toString() || '')
           setRepairNotes(r.repair.repair_notes || '')
           setPartsUsed(r.repair.parts_used || '')
-          setTechnicianId(r.repair.technician_id)
         }
         const h = await api.repairs.history(repairId)
         if (cancelled) return; setHistory(h)
@@ -120,7 +117,6 @@ export function RepairDetail() {
     }
     loadDataRef.current = loadData
     loadData()
-    api.technicians.list().then((t: Technician[]) => { if (!cancelled) setTechnicians(t) })
     return () => { cancelled = true }
   }, [repairId])
 
@@ -207,36 +203,25 @@ export function RepairDetail() {
     }
   }
 
-  const saveTechFields = async () => {
-    if (!repairId) return
-    setSaving(true)
-    try {
-      const cost = estimatedCost ? parseFloat(estimatedCost) : null
-      await api.repairs.updateTechnicianFields({
-        repair_id: repairId,
-        technician_id: technicianId,
-        tech_findings: techFindings || null,
-        recommended_action: recommendedAction || null,
-        parts_required: partsRequired || null,
-        estimated_cost: cost !== null && !isNaN(cost) ? cost : null,
-        repair_notes: repairNotes || null,
-        parts_used: partsUsed || null,
-      })
-    } catch (e) {
-      alert('Failed to save: ' + String(e))
-    } finally {
-      setSaving(false)
-    }
-  }
-
   const updateStatus = async () => {
-    if (!repairId || !selectedStatus) return
+    if (!repairId) {
+      alert('No repair ID found')
+      return
+    }
+    if (!selectedStatus) {
+      alert('Please select a status')
+      return
+    }
+    console.log('Updating status:', { repairId, selectedStatus, statusNote })
     try {
       await api.repairs.updateStatus(repairId, selectedStatus, statusNote || undefined)
+      console.log('Status updated successfully')
       setShowStatusModal(false)
+      setSelectedStatus('')
       setStatusNote('')
       loadData()
     } catch (e) {
+      console.error('Failed to update status:', e)
       alert('Failed to update status: ' + String(e))
     }
   }
@@ -349,9 +334,8 @@ export function RepairDetail() {
   const handleViewQuotation = async () => {
     if (!repairId) return
     try {
-      const paths = await api.pdf.generateQuotationPdf(repairId, false)
-      const customerPath = paths.split('\n')[0]
-      await api.pdf.openFile(customerPath)
+      const path = await api.pdf.generateQuotationPdfHtml(repairId, false)
+      await api.pdf.openFile(path)
     } catch (e) {
       alert(String(e))
     }
@@ -360,9 +344,8 @@ export function RepairDetail() {
   const handleViewInvoice = async () => {
     if (!repairId) return
     try {
-      const paths = await api.pdf.generateInvoicePdf(repairId, false)
-      const customerPath = paths.split('\n')[0]
-      await api.pdf.openFile(customerPath)
+      const path = await api.pdf.generateInvoicePdfHtml(repairId, false)
+      await api.pdf.openFile(path)
     } catch (e) {
       alert(String(e))
     }
@@ -377,7 +360,6 @@ export function RepairDetail() {
   }
 
   const transitions = VALID_STATUS_TRANSITIONS[data.repair.status] || []
-  const isBusiness = data.customer_type === 'business'
   const grandTotal = quotation?.quotation.grand_total || invoiceItems.reduce((s, i) => s + i.total, 0)
   const lastNotif = notificationHistory.length > 0 ? notificationHistory[0] : null
   const isExpired = warranty ? new Date(warranty.expiry_date) < new Date() : false
@@ -425,28 +407,12 @@ export function RepairDetail() {
         </Card>
       </div>
 
-      <Card>
-        <h2 className="text-lg font-semibold text-text-primary mb-4">Technician</h2>
-        <div className="grid grid-cols-2 gap-4">
-          <Select label="Assigned Technician" options={[{ value: '', label: 'Unassigned' }, ...technicians.filter(t => t.active).map(t => ({ value: t.id.toString(), label: t.name }))]} value={technicianId?.toString() || ''} onChange={(e) => setTechnicianId(e.target.value ? parseInt(e.target.value) : null)} />
-          <Input label="Estimated Cost (RM)" type="number" value={estimatedCost} onChange={(e) => setEstimatedCost(e.target.value)} />
-          <Textarea label="Technician Findings" value={techFindings} onChange={(e) => setTechFindings(e.target.value)} className="col-span-2" />
-          <Textarea label="Recommended Action" value={recommendedAction} onChange={(e) => setRecommendedAction(e.target.value)} className="col-span-2" />
-          <Input label="Parts Required" value={partsRequired} onChange={(e) => setPartsRequired(e.target.value)} className="col-span-2" />
-          <Textarea label="Repair Notes" value={repairNotes} onChange={(e) => setRepairNotes(e.target.value)} className="col-span-2" />
-          <Input label="Parts Used" value={partsUsed} onChange={(e) => setPartsUsed(e.target.value)} className="col-span-2" />
-        </div>
-        <div className="mt-4">
-          <Button onClick={saveTechFields} loading={saving}>Save Technician Fields</Button>
-        </div>
-      </Card>
-
       {/* Documents & Payment section */}
 
-      {isBusiness && !quotation && data.repair.status === 'Received' && (
+      {!quotation && (
         <Card>
           <h2 className="text-lg font-semibold text-text-primary mb-3">Quotation</h2>
-          <p className="text-sm text-text-muted mb-4">Generate a formal quotation for this business customer.</p>
+          <p className="text-sm text-text-muted mb-4">Generate a formal quotation for this repair.</p>
           <Button onClick={() => navigate('quotation-builder', { repairId })}>
             Generate Quotation
           </Button>
@@ -466,7 +432,7 @@ export function RepairDetail() {
             {quotation.quotation.response_note && (
               <div className="text-xs text-text-muted">Note: {quotation.quotation.response_note}</div>
             )}
-            <div className="text-2xl font-bold text-[#6B46C1]">RM {quotation.quotation.grand_total.toFixed(2)}</div>
+            <div className="text-2xl font-bold text-[#6B46C1]">LKR {quotation.quotation.grand_total.toFixed(2)}</div>
             <div className="text-xs text-text-muted">{quotation.items.length} item(s)</div>
 
             <div className="mt-3 flex gap-3">
@@ -492,7 +458,7 @@ export function RepairDetail() {
         <Card>
           <h2 className="text-lg font-semibold text-text-primary mb-3">Invoice</h2>
           <div className="space-y-2">
-            <div className="text-2xl font-bold text-[#6B46C1]">RM {grandTotal.toFixed(2)}</div>
+            <div className="text-2xl font-bold text-[#6B46C1]">LKR {grandTotal.toFixed(2)}</div>
             <div className="text-xs text-text-muted">{invoiceItems.length} item(s)</div>
 
             {payment ? (
@@ -500,7 +466,7 @@ export function RepairDetail() {
                 <div className="text-sm font-medium text-text-primary mb-2">Payment</div>
                 <div className="flex justify-between text-sm">
                   <span className="text-text-secondary">{payment.method === 'bank_transfer' ? 'Bank Transfer' : 'Cash'}</span>
-                  <span className="text-text-primary font-medium">RM {payment.amount.toFixed(2)}</span>
+                  <span className="text-text-primary font-medium">LKR {payment.amount.toFixed(2)}</span>
                 </div>
                 {payment.note && (
                   <div className="text-xs text-text-muted mt-1">{payment.note}</div>
@@ -522,9 +488,7 @@ export function RepairDetail() {
         </Card>
       )}
 
-      {invoiceItems.length === 0 && data.repair.status !== 'Received' && data.repair.status !== 'Cancelled' && data.repair.status !== 'Declined' && data.repair.status !== 'Closed' && (
-        isBusiness ? quotation?.quotation.status === 'approved' : true
-      ) && (
+      {invoiceItems.length === 0 && (
         <Card>
           <h2 className="text-lg font-semibold text-text-primary mb-3">Invoice</h2>
           <p className="text-sm text-text-muted mb-4">Generate an invoice for this repair.</p>
@@ -613,18 +577,23 @@ export function RepairDetail() {
         </Card>
       )}
 
-      {/* Phase 4: Draft a Message button (always visible) */}
+      {/* Phase 4: Draft a Message with AI (always visible) */}
       {data.repair.status !== 'Ready for Collection' && (
         <Card>
-          <h2 className="text-lg font-semibold text-text-primary mb-3">Message Customer</h2>
+          <h2 className="text-lg font-semibold text-text-primary mb-3">Draft Message to Customer</h2>
           <p className="text-sm text-text-muted mb-4">
             {messageChannel === 'email'
-              ? 'Draft a custom email using AI assistance.'
-              : 'Draft a custom WhatsApp message using AI assistance.'}
+              ? 'AI will draft a professional email for this customer.'
+              : 'AI will draft a WhatsApp message for this customer.'}
           </p>
-          <Button variant="secondary" onClick={() => { setAiMode('freeform'); setAiGoal(''); setAiDraft(''); setAiSubject(''); setShowAiComposer(true) }}>
-            Draft a Message
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => { setAiMode('template'); setAiGoal(''); setAiDraft(''); setAiSubject(''); setShowAiComposer(true); handleDraftWithAI() }}>
+              Draft with AI
+            </Button>
+            <Button variant="secondary" onClick={() => { setAiMode('freeform'); setAiGoal(''); setAiDraft(''); setAiSubject(''); setShowAiComposer(true) }}>
+              Custom Message
+            </Button>
+          </div>
         </Card>
       )}
 

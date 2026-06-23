@@ -184,8 +184,8 @@ export function InvoiceBuilder() {
         })
       }
 
-      await api.pdf.generateInvoicePdf(repairId, true).then(async (paths) => {
-        try { await api.pdf.openFile(paths.split('\n')[0]) } catch { /* non-fatal */ }
+      await api.pdf.generateInvoicePdfHtml(repairId, true).then(async (path) => {
+        try { await api.pdf.openFile(path) } catch { /* non-fatal */ }
       })
       navigate('repair-detail', { repairId })
     } catch (e) {
@@ -270,7 +270,7 @@ export function InvoiceBuilder() {
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <Input
-                  label="Unit Price (RM)"
+                  label="Unit Price (LKR)"
                   type="number"
                   min={0}
                   step={0.01}
@@ -288,7 +288,7 @@ export function InvoiceBuilder() {
                 />
                 <div className="flex items-end pb-1">
                   <div className="text-sm text-text-secondary font-medium">
-                    = RM {(item.qty * item.unit_price).toFixed(2)}
+                    = LKR {(item.qty * item.unit_price).toFixed(2)}
                   </div>
                 </div>
               </div>
@@ -298,11 +298,11 @@ export function InvoiceBuilder() {
 
         <div className="mt-6 pt-4 border-t border-border-default flex items-center justify-between">
           <div className="text-sm text-text-secondary">Subtotal</div>
-          <div className="text-xl font-bold text-text-primary">RM {subtotal.toFixed(2)}</div>
+          <div className="text-xl font-bold text-text-primary">LKR {subtotal.toFixed(2)}</div>
         </div>
         <div className="flex items-center justify-between text-lg pt-2 border-t border-border-default mt-2">
           <div className="font-semibold text-text-primary">Grand Total</div>
-          <div className="text-2xl font-bold text-[#6B46C1]">RM {subtotal.toFixed(2)}</div>
+          <div className="text-2xl font-bold text-[#6B46C1]">LKR {subtotal.toFixed(2)}</div>
         </div>
       </Card>
 

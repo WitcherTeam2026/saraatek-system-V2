@@ -38,8 +38,7 @@ pub(crate) fn format_phone(raw: &str, default_country_code: &str) -> Result<Stri
     if digits.is_empty() {
         return Err("Phone number has no digits".to_string());
     }
-    let result = if digits.starts_with('0') {
-        let rest = &digits[1..];
+    let result = if let Some(rest) = digits.strip_prefix('0') {
         format!("{}{}", default_country_code, rest)
     } else if digits.starts_with(default_country_code) {
         digits

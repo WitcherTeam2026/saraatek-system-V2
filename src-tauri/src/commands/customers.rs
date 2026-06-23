@@ -69,6 +69,32 @@ pub(crate) fn create_customer_inner(
     .map_err(|e| e.to_string())?;
 
     let id = conn.last_insert_rowid();
+
+    // Auto-sync business customers to companies table
+    if input.r#type == "business" {
+        let company_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM companies WHERE phone = ?",
+                rusqlite::params![input.phone],
+                |row| row.get(0),
+            )
+            .unwrap_or(0)
+            > 0;
+
+        if !company_exists {
+            conn.execute(
+                "INSERT INTO companies (name, phone, email, address) VALUES (?, ?, ?, ?)",
+                rusqlite::params![
+                    input.company_name.as_deref().unwrap_or(&input.name),
+                    input.phone,
+                    input.email,
+                    None::<String>,
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+    }
+
     let mut stmt = conn.prepare(
         "SELECT id, type, name, phone, email, company_name, address, created_at FROM customers WHERE id = ?"
     ).map_err(|e| e.to_string())?;

@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MonthlyRevenue {
     pub month: String,
     pub amount: f64,
@@ -314,6 +314,402 @@ pub fn get_reports_summary(
 ) -> Result<ReportsSummary, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     get_reports_summary_inner(&conn, &start_date, &end_date, include_inactive)
+}
+
+// ── Phase 10: Advanced Analytics ───────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RevenueAnalytics {
+    pub monthly_trend: Vec<MonthlyRevenue>,
+    pub growth_rate: f64,
+    pub avg_monthly: f64,
+    pub best_month: Option<MonthlyRevenue>,
+    pub worst_month: Option<MonthlyRevenue>,
+    pub by_payment_method: Vec<MethodSplit>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RepairAnalytics {
+    pub total_repairs: i64,
+    pub avg_duration_days: f64,
+    pub by_brand: Vec<BrandCount>,
+    pub by_status: Vec<StatusCount>,
+    pub by_device_type: Vec<DeviceTypeCount>,
+    pub common_issues: Vec<IssueCount>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BrandCount {
+    pub brand: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DeviceTypeCount {
+    pub device_type: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct IssueCount {
+    pub issue: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CustomerAnalytics {
+    pub total_customers: i64,
+    pub new_customers: i64,
+    pub repeat_customers: i64,
+    pub repeat_rate: f64,
+    pub avg_repairs_per_customer: f64,
+    pub top_customers: Vec<TopCustomer>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TopCustomer {
+    pub name: String,
+    pub phone: String,
+    pub repair_count: i64,
+    pub total_spent: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WarrantyAnalytics {
+    pub total_warranties: i64,
+    pub active_warranties: i64,
+    pub expired_warranties: i64,
+    pub claims: i64,
+    pub claim_rate: f64,
+    pub avg_warranty_duration_days: f64,
+    pub by_status: Vec<WarrantyStatusCount>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WarrantyStatusCount {
+    pub status: String,
+    pub count: i64,
+}
+
+#[tauri::command]
+pub fn get_revenue_analytics(
+    start_date: String,
+    end_date: String,
+    db: State<Database>,
+) -> Result<RevenueAnalytics, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    let monthly = get_revenue_report_inner(&conn, &start_date, &end_date)?;
+
+    let growth_rate = if monthly.monthly.len() >= 2 {
+        let first = monthly.monthly.first().map(|m| m.amount).unwrap_or(0.0);
+        let last = monthly.monthly.last().map(|m| m.amount).unwrap_or(0.0);
+        if first > 0.0 { ((last - first) / first) * 100.0 } else { 0.0 }
+    } else {
+        0.0
+    };
+
+    let avg_monthly = if monthly.monthly.is_empty() {
+        0.0
+    } else {
+        monthly.total / monthly.monthly.len() as f64
+    };
+
+    let best_month = monthly.monthly.iter().max_by(|a, b| a.amount.partial_cmp(&b.amount).unwrap()).cloned();
+    let worst_month = monthly.monthly.iter().min_by(|a, b| a.amount.partial_cmp(&b.amount).unwrap()).cloned();
+
+    Ok(RevenueAnalytics {
+        monthly_trend: monthly.monthly,
+        growth_rate,
+        avg_monthly,
+        best_month,
+        worst_month,
+        by_payment_method: monthly.by_method,
+    })
+}
+
+#[tauri::command]
+pub fn get_repair_analytics(
+    start_date: String,
+    end_date: String,
+    db: State<Database>,
+) -> Result<RepairAnalytics, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    let total_repairs: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM repairs WHERE received_at BETWEEN ?1 AND DATE(?2, '+1 day')",
+            rusqlite::params![start_date, end_date],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let avg_duration_days: f64 = conn
+        .query_row(
+            "SELECT COALESCE(AVG(JULIANDAY(completed_at) - JULIANDAY(received_at)), 0) FROM repairs WHERE completed_at IS NOT NULL AND received_at BETWEEN ?1 AND DATE(?2, '+1 day')",
+            rusqlite::params![start_date, end_date],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT brand, COUNT(*) as cnt FROM repairs WHERE received_at BETWEEN ?1 AND DATE(?2, '+1 day') GROUP BY brand ORDER BY cnt DESC LIMIT 10",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let by_brand: Vec<BrandCount> = stmt
+        .query_map(rusqlite::params![start_date, end_date], |row| {
+            Ok(BrandCount {
+                brand: row.get(0)?,
+                count: row.get(1)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT status, COUNT(*) as cnt FROM repairs WHERE received_at BETWEEN ?1 AND DATE(?2, '+1 day') GROUP BY status ORDER BY cnt DESC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let by_status: Vec<StatusCount> = stmt
+        .query_map(rusqlite::params![start_date, end_date], |row| {
+            Ok(StatusCount {
+                status: row.get(0)?,
+                count: row.get(1)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT COALESCE(device_type, 'Unknown') as dt, COUNT(*) as cnt FROM repairs WHERE received_at BETWEEN ?1 AND DATE(?2, '+1 day') GROUP BY dt ORDER BY cnt DESC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let by_device_type: Vec<DeviceTypeCount> = stmt
+        .query_map(rusqlite::params![start_date, end_date], |row| {
+            Ok(DeviceTypeCount {
+                device_type: row.get(0)?,
+                count: row.get(1)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT reported_problem, COUNT(*) as cnt FROM repairs WHERE received_at BETWEEN ?1 AND DATE(?2, '+1 day') GROUP BY reported_problem ORDER BY cnt DESC LIMIT 10",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let common_issues: Vec<IssueCount> = stmt
+        .query_map(rusqlite::params![start_date, end_date], |row| {
+            Ok(IssueCount {
+                issue: row.get(0)?,
+                count: row.get(1)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(RepairAnalytics {
+        total_repairs,
+        avg_duration_days,
+        by_brand,
+        by_status,
+        by_device_type,
+        common_issues,
+    })
+}
+
+#[tauri::command]
+pub fn get_customer_analytics(
+    start_date: String,
+    end_date: String,
+    db: State<Database>,
+) -> Result<CustomerAnalytics, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    let total_customers: i64 = conn
+        .query_row("SELECT COUNT(*) FROM customers", [], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+
+    let new_customers: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM customers WHERE created_at BETWEEN ?1 AND DATE(?2, '+1 day')",
+            rusqlite::params![start_date, end_date],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let repeat_customers: i64 = conn
+        .query_row(
+            "SELECT COUNT(DISTINCT customer_id) FROM (SELECT customer_id, COUNT(*) as cnt FROM repairs WHERE received_at BETWEEN ?1 AND DATE(?2, '+1 day') GROUP BY customer_id HAVING cnt > 1)",
+            rusqlite::params![start_date, end_date],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let total_repairs_in_period: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM repairs WHERE received_at BETWEEN ?1 AND DATE(?2, '+1 day')",
+            rusqlite::params![start_date, end_date],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let unique_customers_in_period: i64 = conn
+        .query_row(
+            "SELECT COUNT(DISTINCT customer_id) FROM repairs WHERE received_at BETWEEN ?1 AND DATE(?2, '+1 day')",
+            rusqlite::params![start_date, end_date],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let repeat_rate = if unique_customers_in_period > 0 {
+        (repeat_customers as f64 / unique_customers_in_period as f64) * 100.0
+    } else {
+        0.0
+    };
+
+    let avg_repairs_per_customer = if unique_customers_in_period > 0 {
+        total_repairs_in_period as f64 / unique_customers_in_period as f64
+    } else {
+        0.0
+    };
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT c.name, c.phone, COUNT(r.id) as repair_count, COALESCE(SUM(p.amount), 0) as total_spent
+             FROM customers c
+             JOIN repairs r ON r.customer_id = c.id
+             LEFT JOIN payments p ON p.repair_id = r.id
+             WHERE r.received_at BETWEEN ?1 AND DATE(?2, '+1 day')
+             GROUP BY c.id
+             ORDER BY total_spent DESC
+             LIMIT 10",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let top_customers: Vec<TopCustomer> = stmt
+        .query_map(rusqlite::params![start_date, end_date], |row| {
+            Ok(TopCustomer {
+                name: row.get(0)?,
+                phone: row.get(1)?,
+                repair_count: row.get(2)?,
+                total_spent: row.get(3)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(CustomerAnalytics {
+        total_customers,
+        new_customers,
+        repeat_customers,
+        repeat_rate,
+        avg_repairs_per_customer,
+        top_customers,
+    })
+}
+
+#[tauri::command]
+pub fn get_warranty_analytics(
+    start_date: String,
+    end_date: String,
+    db: State<Database>,
+) -> Result<WarrantyAnalytics, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    let total_warranties: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM warranties WHERE created_at BETWEEN ?1 AND DATE(?2, '+1 day')",
+            rusqlite::params![start_date, end_date],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let active_warranties: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM warranties WHERE expiry_date >= DATE('now') AND created_at BETWEEN ?1 AND DATE(?2, '+1 day')",
+            rusqlite::params![start_date, end_date],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let expired_warranties: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM warranties WHERE expiry_date < DATE('now') AND created_at BETWEEN ?1 AND DATE(?2, '+1 day')",
+            rusqlite::params![start_date, end_date],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let claims: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM repair_history WHERE status LIKE '%Warranty%' AND changed_at BETWEEN ?1 AND DATE(?2, '+1 day')",
+            rusqlite::params![start_date, end_date],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let claim_rate = if total_warranties > 0 {
+        (claims as f64 / total_warranties as f64) * 100.0
+    } else {
+        0.0
+    };
+
+    let avg_warranty_duration_days: f64 = conn
+        .query_row(
+            "SELECT COALESCE(AVG(JULIANDAY(expiry_date) - JULIANDAY(created_at)), 0) FROM warranties WHERE created_at BETWEEN ?1 AND DATE(?2, '+1 day')",
+            rusqlite::params![start_date, end_date],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT 
+                CASE 
+                    WHEN expiry_date >= DATE('now') THEN 'Active'
+                    ELSE 'Expired'
+                END as status,
+                COUNT(*) as cnt
+             FROM warranties
+             WHERE created_at BETWEEN ?1 AND DATE(?2, '+1 day')
+             GROUP BY status",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let by_status: Vec<WarrantyStatusCount> = stmt
+        .query_map(rusqlite::params![start_date, end_date], |row| {
+            Ok(WarrantyStatusCount {
+                status: row.get(0)?,
+                count: row.get(1)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(WarrantyAnalytics {
+        total_warranties,
+        active_warranties,
+        expired_warranties,
+        claims,
+        claim_rate,
+        avg_warranty_duration_days,
+        by_status,
+    })
 }
 
 #[cfg(test)]

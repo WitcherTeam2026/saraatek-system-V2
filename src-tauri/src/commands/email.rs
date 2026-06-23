@@ -19,7 +19,7 @@ fn get_setting(conn: &Connection, key: &str) -> Result<Option<String>, String> {
     }
 }
 
-struct SmtpConfig {
+pub(crate) struct SmtpConfig {
     host: String,
     port: u16,
     username: String,
@@ -135,7 +135,15 @@ pub(crate) fn send_ready_email_notification_inner(
             "SELECT c.name, c.email, r.brand, r.model, r.device_type
              FROM repairs r JOIN customers c ON r.customer_id = c.id WHERE r.id = ?",
             rusqlite::params![repair_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
         )
         .map_err(|e| format!("failed to load repair data: {e}"))?;
 
@@ -184,7 +192,10 @@ pub(crate) fn send_ready_email_notification_inner(
     let send_result = send_email_raw(&cfg, &customer_email, &customer_name, &subject, &body);
 
     let (status, raw_response) = match send_result {
-        Ok(()) => ("sent".to_string(), Some(format!("Sent to {}", customer_email))),
+        Ok(()) => (
+            "sent".to_string(),
+            Some(format!("Sent to {}", customer_email)),
+        ),
         Err(e) => ("failed".to_string(), Some(e)),
     };
 
@@ -234,7 +245,10 @@ pub(crate) fn send_custom_email_inner(
     let send_result = send_email_raw(&cfg, &customer_email, &customer_name, subject, message);
 
     let (status, raw_response) = match send_result {
-        Ok(()) => ("sent".to_string(), Some(format!("Sent to {}", customer_email))),
+        Ok(()) => (
+            "sent".to_string(),
+            Some(format!("Sent to {}", customer_email)),
+        ),
         Err(e) => ("failed".to_string(), Some(e)),
     };
 

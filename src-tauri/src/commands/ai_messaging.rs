@@ -1,6 +1,6 @@
+use crate::commands::ai_service;
 use crate::commands::notifications;
 use crate::commands::notifications::Notification;
-use crate::commands::openrouter;
 use crate::db::Database;
 use chrono::Local;
 use rusqlite::Connection;
@@ -67,18 +67,6 @@ pub(crate) fn draft_notification_message_inner(
     goal: Option<&str>,
     channel: &str,
 ) -> Result<String, String> {
-    let api_key = get_setting(conn, "openrouter_api_key")?
-        .ok_or_else(|| "OpenRouter API key not configured".to_string())?;
-    if api_key.is_empty() {
-        return Err("OpenRouter API key is empty".to_string());
-    }
-
-    let model = get_setting(conn, "openrouter_model")?
-        .unwrap_or_else(|| "meta-llama/llama-3.1-8b-instruct:free".into());
-    if model.is_empty() {
-        return Err("OpenRouter model is not configured".to_string());
-    }
-
     let context = build_repair_context(conn, repair_id)?;
     let is_email = channel == "email";
 
@@ -120,7 +108,7 @@ pub(crate) fn draft_notification_message_inner(
         )
     };
 
-    openrouter::call_openrouter(&system_prompt, &user_prompt, &api_key, &model)
+    ai_service::call_ai(conn, &system_prompt, &user_prompt)
 }
 
 pub(crate) fn send_custom_notification_inner(
@@ -192,15 +180,6 @@ pub(crate) fn summarize_customer_history_inner(
     conn: &Connection,
     customer_id: i64,
 ) -> Result<String, String> {
-    let api_key = get_setting(conn, "openrouter_api_key")?
-        .ok_or_else(|| "OpenRouter API key not configured".to_string())?;
-    if api_key.is_empty() {
-        return Err("OpenRouter API key is empty".to_string());
-    }
-
-    let model = get_setting(conn, "openrouter_model")?
-        .unwrap_or_else(|| "meta-llama/llama-3.1-8b-instruct:free".into());
-
     let mut stmt = conn
         .prepare(
             "SELECT r.id, r.brand, r.model, r.reported_problem, r.status, r.completed_at, r.tech_findings
@@ -241,7 +220,7 @@ pub(crate) fn summarize_customer_history_inner(
         worth knowing before starting a new repair for this customer."
         .to_string();
 
-    openrouter::call_openrouter(&system_prompt, &history_text, &api_key, &model)
+    ai_service::call_ai(conn, &system_prompt, &history_text)
 }
 
 #[tauri::command]
