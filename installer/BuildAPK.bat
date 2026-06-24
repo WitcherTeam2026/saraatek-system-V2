@@ -11,7 +11,7 @@ echo - Java JDK 17+ installed
 echo - Android SDK installed
 echo.
 
-cd /d "d:\opencode\saraaTEK"
+cd /d "%~dp0.."
 
 :: Step 1: Build web app
 echo [1/5] Building web app...
@@ -64,7 +64,7 @@ if exist "mobile\android\app\build\outputs\apk\debug\app-debug.apk" (
     echo ========================================
     copy "mobile\android\app\build\outputs\apk\debug\app-debug.apk" "installer\SaraaTEK.apk"
     echo APK saved to: installer\SaraaTEK.apk
-    start explorer "d:\opencode\saraaTEK\installer"
+    start explorer "%~dp0"
 ) else (
     echo BUILD FAILED - Check errors above
     echo ========================================

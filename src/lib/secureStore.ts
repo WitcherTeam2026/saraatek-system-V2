@@ -45,3 +45,33 @@ export async function isSessionExpired(): Promise<boolean> {
   if (!expiresAt) return false
   return new Date(expiresAt) <= new Date()
 }
+
+// Supabase settings — encrypted via tauri-plugin-store
+export interface SupabaseSettings {
+  url: string
+  anon_key: string
+  service_role_key: string
+  database_password: string
+  is_enabled: boolean
+}
+
+export async function getSupabaseSettings(): Promise<SupabaseSettings> {
+  const s = await getStore()
+  const settings = await s.get('supabase_settings')
+  if (!settings) {
+    return {
+      url: '',
+      anon_key: '',
+      service_role_key: '',
+      database_password: '',
+      is_enabled: false,
+    }
+  }
+  return settings as SupabaseSettings
+}
+
+export async function saveSupabaseSettings(settings: SupabaseSettings): Promise<void> {
+  const s = await getStore()
+  await s.set('supabase_settings', settings)
+  await s.save()
+}

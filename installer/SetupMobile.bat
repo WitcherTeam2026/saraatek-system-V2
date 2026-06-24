@@ -12,7 +12,7 @@ echo    SaraaTEK Mobile Setup - Step by Step
 echo ========================================
 echo.
 
-cd /d "d:\opencode\saraaTEK"
+cd /d "%~dp0.."
 
 :: Step 1: Install Java
 echo [Step 1] Checking Java...
@@ -114,7 +114,7 @@ if exist "src-tauri\gen\android\app\build\outputs\apk\release\app-release.apk" (
     echo ========================================
     copy "src-tauri\gen\android\app\build\outputs\apk\release\app-release.apk" "installer\SaraaTEK.apk"
     echo APK saved to: installer\SaraaTEK.apk
-    start explorer "d:\opencode\saraaTEK\installer"
+    start explorer "%~dp0"
 ) else (
     echo BUILD FAILED - Check errors above
     echo ========================================

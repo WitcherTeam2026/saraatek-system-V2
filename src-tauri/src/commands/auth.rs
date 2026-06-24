@@ -232,6 +232,12 @@ pub fn logout(token: String, db: State<Database>) -> Result<(), String> {
 #[tauri::command]
 pub fn create_user(input: CreateUserInput, token: String, db: State<Database>) -> Result<User, String> {
     let _user = require_auth(&token, &db)?;
+    if _user.role != "admin" {
+        return Err("Only admins can create users".into());
+    }
+    if input.password.len() < 8 {
+        return Err("Password must be at least 8 characters".into());
+    }
     let conn = db.get_conn()?;
 
     let password_hash = hash_password(&input.password);
@@ -304,6 +310,18 @@ pub fn update_user(
     let _user = require_auth(&token, &db)?;
     let conn = db.get_conn()?;
 
+    // Only admins can change roles or active status
+    if role.is_some() || is_active.is_some() {
+        if _user.role != "admin" {
+            return Err("Only admins can change user roles or active status".into());
+        }
+    }
+
+    // Users can only update their own name; other users require admin
+    if id != _user.id && _user.role != "admin" {
+        return Err("Only admins can modify other users".into());
+    }
+
     // Build dynamic SET clause — only update provided fields
     let mut sets = Vec::new();
     let mut values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
@@ -350,6 +368,12 @@ pub fn update_user(
 #[tauri::command]
 pub fn delete_user(id: i64, token: String, db: State<Database>) -> Result<(), String> {
     let _user = require_auth(&token, &db)?;
+    if _user.role != "admin" {
+        return Err("Only admins can delete users".into());
+    }
+    if id == _user.id {
+        return Err("Cannot delete your own account".into());
+    }
     let conn = db.get_conn()?;
     conn.execute("DELETE FROM sessions WHERE user_id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -379,6 +403,10 @@ pub fn change_password(input: ChangePasswordInput, token: String, db: State<Data
 
     if !valid {
         return Err("Current password is incorrect".to_string());
+    }
+
+    if input.new_password.len() < 8 {
+        return Err("New password must be at least 8 characters".into());
     }
 
     let new_hash = hash_password(&input.new_password);

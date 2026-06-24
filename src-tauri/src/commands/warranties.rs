@@ -176,7 +176,7 @@ pub(crate) fn reopen_warranty_claim_inner(
     Ok(())
 }
 
-pub(crate) fn check_expired_warranties_inner(conn: &mut Connection) -> Result<i64, String> {
+pub(crate) fn check_expired_warranties_inner(conn: &Connection) -> Result<i64, String> {
     let today = Utc::now().format("%Y-%m-%d").to_string();
 
     let expired: Vec<String> = conn
@@ -196,23 +196,21 @@ pub(crate) fn check_expired_warranties_inner(conn: &mut Connection) -> Result<i6
     }
 
     let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
-    let tx = conn.transaction().map_err(|e| e.to_string())?;
 
     for rid in &expired {
-        tx.execute(
+        conn.execute(
             "UPDATE repairs SET status = 'Closed', updated_at = ? WHERE id = ?",
             rusqlite::params![now, rid],
         )
         .map_err(|e| e.to_string())?;
 
-        tx.execute(
+        conn.execute(
             "INSERT INTO repair_history (repair_id, status, note, changed_at) VALUES (?, 'Closed', ?, ?)",
             rusqlite::params![rid, "Warranty expired \u{2014} automatically closed", now],
         )
         .map_err(|e| e.to_string())?;
     }
 
-    tx.commit().map_err(|e| e.to_string())?;
     Ok(expired.len() as i64)
 }
 
@@ -279,7 +277,7 @@ pub fn reopen_warranty_claim(repair_id: String, token: String, db: State<Databas
 pub fn check_expired_warranties(token: String, db: State<Database>) -> Result<i64, String> {
     let _user = crate::commands::auth::require_auth(&token, &db)?;
     let mut conn = db.get_conn()?;
-    check_expired_warranties_inner(&mut conn)
+    check_expired_warranties_inner(&conn)
 }
 
 #[cfg(test)]

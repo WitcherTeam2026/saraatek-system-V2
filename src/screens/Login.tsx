@@ -34,7 +34,7 @@ export function Login({ onLogin }: LoginProps) {
       const result = await api.auth.login({ username: username.trim(), password })
       await setAuth(result.session.token, result.user, result.session.expires_at)
 
-      if (result.must_change_password) {
+      if (result.user.must_change_password) {
         setMustChangePassword(true)
       } else {
         onLogin?.()
@@ -51,8 +51,8 @@ export function Login({ onLogin }: LoginProps) {
       setError('Please enter a new password')
       return
     }
-    if (newPassword.length < 6) {
-      setError('Password must be at least 6 characters')
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters')
       return
     }
     if (newPassword !== confirmPassword) {

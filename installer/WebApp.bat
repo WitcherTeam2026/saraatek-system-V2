@@ -13,7 +13,7 @@ echo 3. Use Chrome menu ^> "Install app"
 echo.
 pause
 
-cd /d "d:\opencode\saraaTEK"
+cd /d "%~dp0.."
 
 echo Building web app...
 call npm run build

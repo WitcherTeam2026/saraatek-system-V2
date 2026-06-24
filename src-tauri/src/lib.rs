@@ -73,8 +73,6 @@ pub fn run() {
             commands::pdf_settings::save_pdf_template_setting,
             commands::pdf_settings::save_pdf_template_settings,
             commands::pdf_settings::reset_pdf_template_settings,
-            commands::cloud_sync::get_supabase_settings,
-            commands::cloud_sync::save_supabase_settings,
             commands::cloud_sync::test_supabase_connection,
             commands::cloud_sync::sync_to_cloud,
             commands::cloud_sync::sync_from_cloud,

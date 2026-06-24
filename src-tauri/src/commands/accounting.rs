@@ -253,6 +253,9 @@ pub fn create_journal_entry(
     token: String, db: State<Database>,
 ) -> Result<JournalEntry, String> {
     let _user = crate::commands::auth::require_auth(&token, &db)?;
+    if _user.role != "admin" && _user.role != "manager" {
+        return Err("Only admins or managers can create journal entries".into());
+    }
     let conn = db.get_conn()?;
 
     // Validate: debits must equal credits
@@ -589,6 +592,9 @@ pub fn save_opening_balances(
     token: String, db: State<Database>,
 ) -> Result<JournalEntry, String> {
     let _user = crate::commands::auth::require_auth(&token, &db)?;
+    if _user.role != "admin" && _user.role != "manager" {
+        return Err("Only admins or managers can save opening balances".into());
+    }
     let conn = db.get_conn()?;
 
     // Check if opening balances already exist
@@ -685,6 +691,9 @@ pub fn has_opening_balances(token: String, db: State<Database>) -> Result<bool, 
 #[tauri::command]
 pub fn delete_opening_balances(token: String, db: State<Database>) -> Result<(), String> {
     let _user = crate::commands::auth::require_auth(&token, &db)?;
+    if _user.role != "admin" && _user.role != "manager" {
+        return Err("Only admins or managers can delete opening balances".into());
+    }
     let conn = db.get_conn()?;
 
     let entry_id: Option<i64> = conn

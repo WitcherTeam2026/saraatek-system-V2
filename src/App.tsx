@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAppStore } from './stores/app'
-import { getAuthToken, getAuthExpiresAt, clearAuth, isSessionExpired } from './lib/secureStore'
+import { getAuthToken, clearAuth, isSessionExpired } from './lib/secureStore'
 import { Layout } from './components/Layout'
 import { Dashboard } from './screens/Dashboard'
 import { NewRepairStep1 } from './screens/NewRepairStep1'

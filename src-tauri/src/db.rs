@@ -429,6 +429,7 @@ const MIGRATIONS: &[Migration] = &[
     // ── v12: Add must_change_password column ─────────────────────────
     Migration { version: 12, description: "Add must_change_password column", sql: "
         ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;
+        UPDATE users SET must_change_password = 1 WHERE username = 'admin';
     " },
 
     // ── v13: Seed default admin user ─────────────────────────────────

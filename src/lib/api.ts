@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { getAuthToken, clearAuth } from './secureStore'
+import { getAuthToken, clearAuth, getSupabaseSettings, saveSupabaseSettings } from './secureStore'
 import type {
   Customer, CreateCustomerInput,
   Repair, RepairWithCustomer, CreateRepairInput, RepairFilter, RepairHistory,
@@ -299,17 +299,16 @@ export const api = {
   },
 
   cloudSync: {
-    getSettings: () => invokeAuth<SupabaseSettings>('get_supabase_settings', {}),
-    saveSettings: (settings: SupabaseSettings) =>
-      invokeAuth<void>('save_supabase_settings', { settings }),
+    getSettings: () => getSupabaseSettings(),
+    saveSettings: (settings: SupabaseSettings) => saveSupabaseSettings(settings),
     testConnection: (settings: SupabaseSettings) =>
       invokeAuth<boolean>('test_supabase_connection', { settings }),
     syncToCloud: (settings: SupabaseSettings, tableName: string, records: any[]) =>
       invokeAuth<SyncStatus>('sync_to_cloud', { settings, tableName, records }),
     syncFromCloud: (settings: SupabaseSettings, tableName: string) =>
       invokeAuth<any[]>('sync_from_cloud', { settings, tableName }),
-    backupToCloud: (settings: SupabaseSettings, dbPath: string) =>
-      invokeAuth<string>('backup_to_cloud', { settings, dbPath }),
+    backupToCloud: (settings: SupabaseSettings) =>
+      invokeAuth<string>('backup_to_cloud', { settings }),
     getSyncStatus: () => invokeAuth<SyncStatus>('get_sync_status', {}),
   },
 

@@ -1,4 +1,6 @@
 use crate::db::Database;
+use rusqlite::backup::Backup;
+use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -65,7 +67,7 @@ pub fn restore_database(backup_path: String, token: String, db: State<Database>)
 
     // Get current database path
     let conn = db.get_conn()?;
-    let original_path = conn
+    let original_path: String = conn
         .query_row("PRAGMA database_list", [], |row| {
             let _: String = row.get(0)?;
             row.get::<_, String>(1)
@@ -78,8 +80,18 @@ pub fn restore_database(backup_path: String, token: String, db: State<Database>)
     let pre_restore_backup = format!("{}.pre_restore_{}", original_path, timestamp);
     fs::copy(&original_path, &pre_restore_backup).ok();
 
-    // Restore by copying backup over current database
-    fs::copy(&backup_path, &original_path)
+    // Open the backup file as source
+    let source = Connection::open(&backup_path).map_err(|e| format!("Failed to open backup: {}", e))?;
+
+    // Open the live database as destination
+    let dest = Connection::open(&original_path).map_err(|e| format!("Failed to open live database: {}", e))?;
+
+    // Use SQLite backup API to restore — works even with open connections
+    let backup = Backup::new(&source, &dest)
+        .map_err(|e| format!("Failed to initialize backup: {}", e))?;
+
+    backup
+        .run_to_completion(500, std::time::Duration::ZERO, None)
         .map_err(|e| format!("Failed to restore database: {}", e))?;
 
     Ok(())

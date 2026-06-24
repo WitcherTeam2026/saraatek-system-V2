@@ -89,6 +89,50 @@ pub struct RepairFilter {
     pub sort_order: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum SortColumn {
+    ReceivedAt,
+    Status,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum SortDirection {
+    Asc,
+    Desc,
+}
+
+impl SortColumn {
+    fn from_str(s: &str) -> Self {
+        match s {
+            "status" => Self::Status,
+            _ => Self::ReceivedAt,
+        }
+    }
+
+    fn sql(&self) -> &str {
+        match self {
+            Self::ReceivedAt => "r.received_at",
+            Self::Status => "r.status",
+        }
+    }
+}
+
+impl SortDirection {
+    fn from_str(s: &str) -> Self {
+        match s {
+            "asc" => Self::Asc,
+            _ => Self::Desc,
+        }
+    }
+
+    fn sql(&self) -> &str {
+        match self {
+            Self::Asc => "ASC",
+            Self::Desc => "DESC",
+        }
+    }
+}
+
 fn get_setting(conn: &Connection, key: &str) -> Result<Option<String>, String> {
     match conn.query_row(
         "SELECT value FROM shop_settings WHERE key = ?",
@@ -259,14 +303,14 @@ pub(crate) fn list_repairs_inner(
     }
 
     let sort_col = match filter.sort_by.as_deref() {
-        Some("status") => "r.status",
-        _ => "r.received_at",
+        Some(s) => SortColumn::from_str(s),
+        None => SortColumn::ReceivedAt,
     };
-    let sort_order = match filter.sort_order.as_deref() {
-        Some("asc") => "ASC",
-        _ => "DESC",
+    let sort_dir = match filter.sort_order.as_deref() {
+        Some(s) => SortDirection::from_str(s),
+        None => SortDirection::Desc,
     };
-    sql.push_str(&format!(" ORDER BY {} {}", sort_col, sort_order));
+    sql.push_str(&format!(" ORDER BY {} {}", sort_col.sql(), sort_dir.sql()));
 
     let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
     let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
@@ -315,7 +359,6 @@ pub(crate) fn update_repair_status_inner(
     input: &UpdateStatusInput,
 ) -> Result<(), String> {
     let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
-    println!("Updating repair status: repair_id={}, new_status={}", input.repair_id, input.new_status);
 
     conn.execute(
         "UPDATE repairs SET status = ?, updated_at = ? WHERE id = ?",
@@ -323,7 +366,6 @@ pub(crate) fn update_repair_status_inner(
     )
     .map_err(|e| e.to_string())?;
 
-    println!("Inserting repair history for repair_id={}", input.repair_id);
     conn.execute(
         "INSERT INTO repair_history (repair_id, status, note, changed_at) VALUES (?, ?, ?, ?)",
         rusqlite::params![input.repair_id, input.new_status, input.note, now],
@@ -338,7 +380,6 @@ pub(crate) fn update_repair_status_inner(
         .map_err(|e| e.to_string())?;
     }
 
-    println!("Status update completed successfully");
     Ok(())
 }
 

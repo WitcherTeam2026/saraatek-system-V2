@@ -5,6 +5,7 @@ import { useAppStore } from '../stores/app'
 import { LiquidCard, LiquidButton, LiquidInput } from '../components/liquid'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { ArrowLeft, UserPlus, Users, Edit2, Trash2, X } from 'lucide-react'
+import { mapError } from '../lib/mapError'
 import type { User } from '../types'
 
 const roles = [
@@ -35,7 +36,7 @@ export function UserManagement() {
       const data = await api.auth.listUsers()
       if (mounted.current) setUsers(data)
     } catch (e) {
-      if (mounted.current) setError('Failed to load: ' + String(e))
+      if (mounted.current) setError(mapError(e))
     } finally {
       if (mounted.current) setLoading(false)
     }
@@ -77,7 +78,7 @@ export function UserManagement() {
       resetForm()
       loadUsers()
     } catch (e) {
-      if (mounted.current) setError('Failed to save: ' + String(e))
+      if (mounted.current) setError(mapError(e))
     } finally {
       if (mounted.current) setSaving(false)
     }
@@ -98,7 +99,7 @@ export function UserManagement() {
       await api.auth.deleteUser(id)
       loadUsers()
     } catch (e) {
-      if (mounted.current) setError('Failed to delete: ' + String(e))
+      if (mounted.current) setError(mapError(e))
     }
   }
 

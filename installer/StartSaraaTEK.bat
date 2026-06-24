@@ -5,6 +5,6 @@ echo ========================================
 echo.
 echo Starting SaraaTEK...
 echo.
-cd /d "d:\opencode\saraaTEK"
+cd /d "%~dp0.."
 npm run tauri dev
 pause

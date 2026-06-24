@@ -13,49 +13,6 @@ pub struct SupabaseSettings {
 }
 
 #[tauri::command]
-pub fn get_supabase_settings(token: String, db: State<Database>) -> Result<SupabaseSettings, String> {
-    let _user = crate::commands::auth::require_auth(&token, &db)?;
-    let config_dir = dirs::config_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("saraatek");
-    let settings_file = config_dir.join("supabase_settings.json");
-    
-    if settings_file.exists() {
-        let data = std::fs::read_to_string(&settings_file)
-            .map_err(|e| format!("Failed to read settings: {}", e))?;
-        serde_json::from_str(&data)
-            .map_err(|e| format!("Failed to parse settings: {}", e))
-    } else {
-        Ok(SupabaseSettings {
-            url: String::new(),
-            anon_key: String::new(),
-            service_role_key: String::new(),
-            database_password: String::new(),
-            is_enabled: false,
-        })
-    }
-}
-
-#[tauri::command]
-pub fn save_supabase_settings(settings: SupabaseSettings, token: String, db: State<Database>) -> Result<(), String> {
-    let _user = crate::commands::auth::require_auth(&token, &db)?;
-    let config_dir = dirs::config_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("saraatek");
-    std::fs::create_dir_all(&config_dir)
-        .map_err(|e| format!("Failed to create config dir: {}", e))?;
-    
-    let settings_file = config_dir.join("supabase_settings.json");
-    let data = serde_json::to_string_pretty(&settings)
-        .map_err(|e| format!("Failed to serialize settings: {}", e))?;
-    
-    std::fs::write(&settings_file, data)
-        .map_err(|e| format!("Failed to write settings: {}", e))?;
-    
-    Ok(())
-}
-
-#[tauri::command]
 pub async fn test_supabase_connection(settings: SupabaseSettings, token: String, db: State<'_, Database>) -> Result<bool, String> {
     let _user = crate::commands::auth::require_auth(&token, &db)?;
     let config = SupabaseConfig {
@@ -111,11 +68,21 @@ pub async fn sync_from_cloud(
 #[tauri::command]
 pub async fn backup_to_cloud(
     settings: SupabaseSettings,
-    db_path: String,
     token: String,
     db: State<'_, Database>,
 ) -> Result<String, String> {
     let _user = crate::commands::auth::require_auth(&token, &db)?;
+
+    // Get actual database path from SQLite — never trust frontend input
+    let conn = db.get_conn()?;
+    let db_path: String = conn
+        .query_row("PRAGMA database_list", [], |row| {
+            let _: String = row.get(0)?;
+            row.get::<_, String>(1)
+        })
+        .map_err(|e| e.to_string())?;
+    drop(conn);
+
     let config = SupabaseConfig {
         url: settings.url,
         anon_key: settings.anon_key,
