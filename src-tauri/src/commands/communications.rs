@@ -34,9 +34,10 @@ pub struct LogCommunicationInput {
 #[tauri::command]
 pub fn log_communication(
     input: LogCommunicationInput,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Communication, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     conn.execute(
         "INSERT INTO communications (company_id, contact_id, repair_id, channel, direction, subject, message, status, sent_by) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
@@ -60,9 +61,10 @@ pub fn log_communication(
 #[tauri::command]
 pub fn get_communications(
     company_id: i64,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Vec<Communication>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     let mut stmt = conn
         .prepare("SELECT * FROM communications WHERE company_id = ?1 ORDER BY created_at DESC")
         .map_err(|e| e.to_string())?;
@@ -93,9 +95,10 @@ pub fn get_communications(
 #[tauri::command]
 pub fn get_communications_for_repair(
     repair_id: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Vec<Communication>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     let mut stmt = conn
         .prepare("SELECT * FROM communications WHERE repair_id = ?1 ORDER BY created_at DESC")
         .map_err(|e| e.to_string())?;

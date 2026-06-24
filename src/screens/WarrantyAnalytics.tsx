@@ -6,6 +6,7 @@ import { LiquidPanel, LiquidMetric } from '../components/liquid'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { ArrowLeft, ShieldCheck, Clock, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import type { WarrantyAnalytics as WarrantyAnalyticsType } from '../types'
+import { mapError } from '../lib/mapError'
 
 const staggerContainer = {
   hidden: { opacity: 0 },
@@ -80,7 +81,7 @@ export function WarrantyAnalytics() {
     setLoading(true)
     api.reports.warrantyAnalytics(startDate, endDate)
       .then((r) => { if (mounted.current) setData(r) })
-      .catch((e) => setError(String(e)))
+      .catch((e) => setError(mapError(e)))
       .finally(() => { if (mounted.current) setLoading(false) })
     return () => { mounted.current = false }
   }, [startDate, endDate])

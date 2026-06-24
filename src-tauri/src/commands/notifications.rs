@@ -1,5 +1,5 @@
 use crate::db::Database;
-use chrono::Local;
+use chrono::Utc;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -59,7 +59,7 @@ pub(crate) fn send_ready_notification_inner(
     conn: &Connection,
     repair_id: &str,
 ) -> Result<Notification, String> {
-    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     let (customer_name, customer_phone, device_brand, device_model, device_type): (
         String,
@@ -196,18 +196,20 @@ pub(crate) fn get_notification_history_inner(
 #[tauri::command]
 pub fn send_ready_notification(
     repair_id: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Notification, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     send_ready_notification_inner(&conn, &repair_id)
 }
 
 #[tauri::command]
 pub fn get_notification_history(
     repair_id: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Vec<Notification>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     get_notification_history_inner(&conn, &repair_id)
 }
 

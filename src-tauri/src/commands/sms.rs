@@ -143,15 +143,17 @@ pub(crate) fn send_sms_inner(
 pub fn send_sms(
     to_phone: String,
     message: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<SmsResult, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     send_sms_inner(&conn, &to_phone, &message)
 }
 
 #[tauri::command]
-pub fn get_sms_config(db: State<Database>) -> Result<SmsConfig, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn get_sms_config(token: String, db: State<Database>) -> Result<SmsConfig, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     get_sms_config_inner(&conn)
 }
 
@@ -161,9 +163,10 @@ pub fn save_sms_config(
     api_key: String,
     api_url: String,
     sender_id: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<(), String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
     conn.execute(
         "INSERT OR REPLACE INTO shop_settings (key, value) VALUES ('sms_provider', ?1)",

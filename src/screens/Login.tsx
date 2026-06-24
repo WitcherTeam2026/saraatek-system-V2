@@ -1,21 +1,26 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { api } from '../lib/api'
-import { useAppStore } from '../stores/app'
+import { setAuth } from '../lib/secureStore'
 import { LiquidButton } from '../components/liquid'
 import { ErrorBanner } from '../components/ErrorBanner'
-import { Lock, User } from 'lucide-react'
+import { Lock, User, KeyRound } from 'lucide-react'
+import { mapError } from '../lib/mapError'
 
 interface LoginProps {
   onLogin?: () => void
 }
 
 export function Login({ onLogin }: LoginProps) {
-  const navigate = useAppStore((s) => s.navigate)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const [mustChangePassword, setMustChangePassword] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [changingPassword, setChangingPassword] = useState(false)
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
@@ -27,14 +32,43 @@ export function Login({ onLogin }: LoginProps) {
     setError('')
     try {
       const result = await api.auth.login({ username: username.trim(), password })
-      localStorage.setItem('auth_token', result.session.token)
-      localStorage.setItem('auth_user', JSON.stringify(result.user))
-      onLogin?.()
-      navigate('dashboard')
+      await setAuth(result.session.token, result.user, result.session.expires_at)
+
+      if (result.must_change_password) {
+        setMustChangePassword(true)
+      } else {
+        onLogin?.()
+      }
     } catch (e) {
-      setError(String(e))
+      setError(mapError(e))
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleChangePassword = async () => {
+    if (!newPassword.trim()) {
+      setError('Please enter a new password')
+      return
+    }
+    if (newPassword.length < 6) {
+      setError('Password must be at least 6 characters')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match')
+      return
+    }
+
+    setChangingPassword(true)
+    setError('')
+    try {
+      await api.auth.changePassword({ old_password: password, new_password: newPassword })
+      onLogin?.()
+    } catch (e) {
+      setError(mapError(e))
+    } finally {
+      setChangingPassword(false)
     }
   }
 
@@ -72,65 +106,102 @@ export function Login({ onLogin }: LoginProps) {
             border: '1px solid rgba(255, 255, 255, 0.06)',
           }}
         >
-          <h2 className="text-lg font-semibold text-text-primary mb-6 text-center">Sign In</h2>
+          <h2 className="text-lg font-semibold text-text-primary mb-6 text-center">
+            {mustChangePassword ? 'Set New Password' : 'Sign In'}
+          </h2>
 
           {error && <ErrorBanner message={error} onClose={() => setError('')} />}
 
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs font-medium text-text-muted uppercase tracking-wider mb-1.5 block">Username</label>
-              <div className="relative">
-                <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl text-sm text-text-primary placeholder:text-text-muted/60 focus:outline-none focus:ring-2 focus:ring-brand-purple/30 transition-all"
-                  style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}
-                  placeholder="Enter username"
-                  onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-                />
+          {!mustChangePassword ? (
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-text-muted uppercase tracking-wider mb-1.5 block">Username</label>
+                <div className="relative">
+                  <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 rounded-xl text-sm text-text-primary placeholder:text-text-muted/60 focus:outline-none focus:ring-2 focus:ring-brand-purple/30 transition-all"
+                    style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}
+                    placeholder="Enter username"
+                    onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                  />
+                </div>
               </div>
-            </div>
 
-            <div>
-              <label className="text-xs font-medium text-text-muted uppercase tracking-wider mb-1.5 block">Password</label>
-              <div className="relative">
-                <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl text-sm text-text-primary placeholder:text-text-muted/60 focus:outline-none focus:ring-2 focus:ring-brand-purple/30 transition-all"
-                  style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}
-                  placeholder="Enter password"
-                  onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-                />
+              <div>
+                <label className="text-xs font-medium text-text-muted uppercase tracking-wider mb-1.5 block">Password</label>
+                <div className="relative">
+                  <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 rounded-xl text-sm text-text-primary placeholder:text-text-muted/60 focus:outline-none focus:ring-2 focus:ring-brand-purple/30 transition-all"
+                    style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}
+                    placeholder="Enter password"
+                    onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                  />
+                </div>
               </div>
-            </div>
 
-            <LiquidButton
-              onClick={handleLogin}
-              loading={loading}
-              className="w-full mt-6"
-            >
-              Sign In
-            </LiquidButton>
-
-            <div className="mt-4 text-center">
-              <button
-                onClick={() => navigate('user-management')}
-                className="text-xs text-brand-purple hover:text-brand-purple-hover transition-colors"
+              <LiquidButton
+                onClick={handleLogin}
+                loading={loading}
+                className="w-full mt-6"
               >
-                Create new account
-              </button>
+                Sign In
+              </LiquidButton>
             </div>
-          </div>
-        </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-xs text-text-muted text-center mb-4">
+                You must set a new password before continuing.
+              </p>
 
-        <p className="text-center text-xs text-text-muted mt-6">
-          Default: admin / admin123
-        </p>
+              <div>
+                <label className="text-xs font-medium text-text-muted uppercase tracking-wider mb-1.5 block">New Password</label>
+                <div className="relative">
+                  <KeyRound size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 rounded-xl text-sm text-text-primary placeholder:text-text-muted/60 focus:outline-none focus:ring-2 focus:ring-brand-purple/30 transition-all"
+                    style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}
+                    placeholder="Enter new password"
+                    onKeyDown={(e) => e.key === 'Enter' && handleChangePassword()}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-text-muted uppercase tracking-wider mb-1.5 block">Confirm Password</label>
+                <div className="relative">
+                  <KeyRound size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 rounded-xl text-sm text-text-primary placeholder:text-text-muted/60 focus:outline-none focus:ring-2 focus:ring-brand-purple/30 transition-all"
+                    style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}
+                    placeholder="Confirm new password"
+                    onKeyDown={(e) => e.key === 'Enter' && handleChangePassword()}
+                  />
+                </div>
+              </div>
+
+              <LiquidButton
+                onClick={handleChangePassword}
+                loading={changingPassword}
+                className="w-full mt-6"
+              >
+                Set Password
+              </LiquidButton>
+            </div>
+          )}
+        </div>
       </motion.div>
     </div>
   )

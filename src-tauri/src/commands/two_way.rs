@@ -47,7 +47,7 @@ pub(crate) fn process_incoming_message_inner(
     conn: &rusqlite::Connection,
     input: &ProcessIncomingInput,
 ) -> Result<IncomingMessage, String> {
-    let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     // Try to find repair_id from phone if not provided
     let repair_id = match &input.repair_id {
@@ -92,9 +92,10 @@ pub(crate) fn process_incoming_message_inner(
 #[tauri::command]
 pub fn process_incoming_message(
     input: ProcessIncomingInput,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<IncomingMessage, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     process_incoming_message_inner(&conn, &input)
 }
 
@@ -102,9 +103,10 @@ pub fn process_incoming_message(
 pub fn get_incoming_messages(
     repair_id: Option<String>,
     limit: Option<i64>,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Vec<IncomingMessage>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     let limit = limit.unwrap_or(50);
 
     let mut messages = Vec::new();
@@ -174,9 +176,10 @@ pub fn get_incoming_messages(
 pub fn get_conversation(
     customer_phone: String,
     limit: Option<i64>,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Vec<IncomingMessage>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     let limit = limit.unwrap_or(50);
 
     let mut stmt = conn

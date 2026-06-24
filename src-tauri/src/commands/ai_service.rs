@@ -113,8 +113,9 @@ pub(crate) fn call_ai(
 pub fn chat_with_ai(
     system_prompt: String,
     user_prompt: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<String, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     call_ai(&conn, &system_prompt, &user_prompt)
 }

@@ -30,9 +30,19 @@ pub struct DatabaseHealth {
     pub errors: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecentActivity {
+    #[serde(rename = "type")]
+    pub activity_type: String,
+    pub id: String,
+    pub status: String,
+    pub created_at: String,
+}
+
 #[tauri::command]
-pub fn get_database_stats(db: tauri::State<Database>) -> Result<DatabaseStats, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn get_database_stats(token: String, db: tauri::State<Database>) -> Result<DatabaseStats, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     
     let mut total_records = HashMap::new();
     
@@ -75,8 +85,9 @@ pub fn get_database_stats(db: tauri::State<Database>) -> Result<DatabaseStats, S
 }
 
 #[tauri::command]
-pub fn get_table_info(table_name: String, db: tauri::State<Database>) -> Result<TableInfo, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn get_table_info(table_name: String, token: String, db: tauri::State<Database>) -> Result<TableInfo, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     
     let row_count: i64 = conn
         .query_row(
@@ -100,8 +111,9 @@ pub fn get_table_info(table_name: String, db: tauri::State<Database>) -> Result<
 }
 
 #[tauri::command]
-pub fn get_database_health(db: tauri::State<Database>) -> Result<DatabaseHealth, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn get_database_health(token: String, db: tauri::State<Database>) -> Result<DatabaseHealth, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     
     let mut warnings = Vec::new();
     let mut errors = Vec::new();
@@ -159,8 +171,9 @@ pub fn get_database_health(db: tauri::State<Database>) -> Result<DatabaseHealth,
 }
 
 #[tauri::command]
-pub fn get_all_tables(db: tauri::State<Database>) -> Result<Vec<String>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn get_all_tables(token: String, db: tauri::State<Database>) -> Result<Vec<String>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     
     let mut stmt = conn
         .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
@@ -176,8 +189,9 @@ pub fn get_all_tables(db: tauri::State<Database>) -> Result<Vec<String>, String>
 }
 
 #[tauri::command]
-pub fn get_table_columns(table_name: String, db: tauri::State<Database>) -> Result<Vec<String>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn get_table_columns(table_name: String, token: String, db: tauri::State<Database>) -> Result<Vec<String>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     
     let mut stmt = conn
         .prepare(&format!("PRAGMA table_info({})", table_name))
@@ -193,8 +207,9 @@ pub fn get_table_columns(table_name: String, db: tauri::State<Database>) -> Resu
 }
 
 #[tauri::command]
-pub fn get_recent_activity(limit: usize, db: tauri::State<Database>) -> Result<Vec<HashMap<String, String>>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn get_recent_activity(limit: usize, token: String, db: tauri::State<Database>) -> Result<Vec<RecentActivity>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     
     let mut activities = Vec::new();
     
@@ -203,23 +218,20 @@ pub fn get_recent_activity(limit: usize, db: tauri::State<Database>) -> Result<V
         .prepare("SELECT id, status, created_at FROM repairs ORDER BY created_at DESC LIMIT ?")
         .map_err(|e| e.to_string())?;
     
-    let repairs: Vec<HashMap<String, String>> = stmt
+    let repairs: Vec<RecentActivity> = stmt
         .query_map([limit as i64], |row| {
             let id: String = row.get(0)?;
             let status: String = row.get(1)?;
             let created_at: String = row.get(2)?;
-            Ok((id, status, created_at))
+            Ok(RecentActivity {
+                activity_type: "repair".to_string(),
+                id,
+                status,
+                created_at,
+            })
         })
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
-        .map(|(id, status, created_at)| {
-            let mut activity = HashMap::new();
-            activity.insert("type".to_string(), "repair".to_string());
-            activity.insert("id".to_string(), id);
-            activity.insert("status".to_string(), status);
-            activity.insert("created_at".to_string(), created_at);
-            activity
-        })
         .collect();
     
     activities.extend(repairs);

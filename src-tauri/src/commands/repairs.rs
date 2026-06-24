@@ -1,6 +1,6 @@
 use crate::commands::audit;
 use crate::db::Database;
-use chrono::Local;
+use chrono::Utc;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -102,7 +102,7 @@ fn get_setting(conn: &Connection, key: &str) -> Result<Option<String>, String> {
 }
 
 pub(crate) fn generate_repair_id_inner(conn: &Connection) -> Result<String, String> {
-    let now = Local::now();
+    let now = Utc::now();
     let current_month = now.format("%m").to_string();
     let current_day = now.format("%d").to_string();
 
@@ -139,7 +139,7 @@ pub(crate) fn create_repair_inner(
     input: &CreateRepairInput,
 ) -> Result<Repair, String> {
     let repair_id = generate_repair_id_inner(conn)?;
-    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     conn.execute(
         "INSERT INTO repairs (id, customer_id, status, device_type, brand, model, serial_number, color_desc, reported_problem, received_at) VALUES (?, ?, 'Received', ?, ?, ?, ?, ?, ?, ?)",
@@ -314,7 +314,7 @@ pub(crate) fn update_repair_status_inner(
     conn: &Connection,
     input: &UpdateStatusInput,
 ) -> Result<(), String> {
-    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     println!("Updating repair status: repair_id={}, new_status={}", input.repair_id, input.new_status);
 
     conn.execute(
@@ -346,7 +346,7 @@ pub(crate) fn update_technician_fields_inner(
     conn: &Connection,
     input: &UpdateTechnicianFieldsInput,
 ) -> Result<(), String> {
-    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     let old: Vec<(String, Option<String>)> = conn
         .prepare(
@@ -426,7 +426,15 @@ pub(crate) fn get_repair_history_inner(
     Ok(history)
 }
 
-pub(crate) fn get_dashboard_counts_inner(conn: &Connection) -> Result<serde_json::Value, String> {
+#[derive(Debug, Serialize)]
+pub struct DashboardCounts {
+    pub open_repairs: i64,
+    pub awaiting_approval: i64,
+    pub repairing: i64,
+    pub ready_for_collection: i64,
+}
+
+pub(crate) fn get_dashboard_counts_inner(conn: &Connection) -> Result<DashboardCounts, String> {
     let open: i64 = conn.query_row(
         "SELECT COUNT(*) FROM repairs WHERE status NOT IN ('Completed', 'Declined', 'Cancelled', 'Closed')",
         [], |row| row.get(0)
@@ -456,68 +464,76 @@ pub(crate) fn get_dashboard_counts_inner(conn: &Connection) -> Result<serde_json
         )
         .map_err(|e| e.to_string())?;
 
-    Ok(serde_json::json!({
-        "open_repairs": open,
-        "awaiting_approval": awaiting,
-        "repairing": repairing,
-        "ready_for_collection": ready,
-    }))
+    Ok(DashboardCounts {
+        open_repairs: open,
+        awaiting_approval: awaiting,
+        repairing,
+        ready_for_collection: ready,
+    })
 }
 
 #[tauri::command]
-pub fn generate_new_repair_id(db: State<Database>) -> Result<String, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn generate_new_repair_id(token: String, db: State<Database>) -> Result<String, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     generate_repair_id_inner(&conn)
 }
 
 #[tauri::command]
-pub fn create_repair(input: CreateRepairInput, db: State<Database>) -> Result<Repair, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn create_repair(input: CreateRepairInput, token: String, db: State<Database>) -> Result<Repair, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     create_repair_inner(&conn, &input)
 }
 
 #[tauri::command]
-pub fn get_repair(id: String, db: State<Database>) -> Result<Option<RepairWithCustomer>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn get_repair(id: String, token: String, db: State<Database>) -> Result<Option<RepairWithCustomer>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     get_repair_inner(&conn, &id)
 }
 
 #[tauri::command]
 pub fn list_repairs(
     filter: RepairFilter,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Vec<RepairWithCustomer>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     list_repairs_inner(&conn, &filter)
 }
 
 #[tauri::command]
-pub fn update_repair_status(input: UpdateStatusInput, db: State<Database>) -> Result<(), String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn update_repair_status(input: UpdateStatusInput, token: String, db: State<Database>) -> Result<(), String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     update_repair_status_inner(&conn, &input)
 }
 
 #[tauri::command]
 pub fn update_technician_fields(
     input: UpdateTechnicianFieldsInput,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<(), String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     update_technician_fields_inner(&conn, &input)
 }
 
 #[tauri::command]
 pub fn get_repair_history(
     repair_id: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Vec<RepairHistory>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     get_repair_history_inner(&conn, &repair_id)
 }
 
 #[tauri::command]
-pub fn get_dashboard_counts(db: State<Database>) -> Result<serde_json::Value, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn get_dashboard_counts(token: String, db: State<Database>) -> Result<DashboardCounts, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     get_dashboard_counts_inner(&conn)
 }
 

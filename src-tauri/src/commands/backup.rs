@@ -12,14 +12,15 @@ pub struct BackupInfo {
 }
 
 #[tauri::command]
-pub fn backup_database(db: State<Database>, backup_path: Option<String>) -> Result<BackupInfo, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn backup_database(token: String, db: State<Database>, backup_path: Option<String>) -> Result<BackupInfo, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
     // Determine backup path
     let final_path = if let Some(path) = backup_path {
         path
     } else {
-        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+        let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
         let app_data = dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join("saraatek");
@@ -50,19 +51,20 @@ pub fn backup_database(db: State<Database>, backup_path: Option<String>) -> Resu
     Ok(BackupInfo {
         path: final_path,
         size: metadata.len(),
-        created_at: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+        created_at: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
     })
 }
 
 #[tauri::command]
-pub fn restore_database(backup_path: String, db: State<Database>) -> Result<(), String> {
+pub fn restore_database(backup_path: String, token: String, db: State<Database>) -> Result<(), String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
     // Verify backup exists
     if !std::path::Path::new(&backup_path).exists() {
         return Err("Backup file not found".to_string());
     }
 
     // Get current database path
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn = db.get_conn()?;
     let original_path = conn
         .query_row("PRAGMA database_list", [], |row| {
             let _: String = row.get(0)?;
@@ -72,7 +74,7 @@ pub fn restore_database(backup_path: String, db: State<Database>) -> Result<(), 
     drop(conn);
 
     // Create a backup of current database before restore
-    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
     let pre_restore_backup = format!("{}.pre_restore_{}", original_path, timestamp);
     fs::copy(&original_path, &pre_restore_backup).ok();
 
@@ -84,7 +86,8 @@ pub fn restore_database(backup_path: String, db: State<Database>) -> Result<(), 
 }
 
 #[tauri::command]
-pub fn list_backups() -> Result<Vec<BackupInfo>, String> {
+pub fn list_backups(token: String, db: State<Database>) -> Result<Vec<BackupInfo>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
     let app_data = dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("saraatek");
@@ -124,8 +127,9 @@ pub fn list_backups() -> Result<Vec<BackupInfo>, String> {
 }
 
 #[tauri::command]
-pub fn get_database_path(db: State<Database>) -> Result<String, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn get_database_path(token: String, db: State<Database>) -> Result<String, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     conn.query_row("PRAGMA database_list", [], |row| {
         let _: String = row.get(0)?;
         row.get::<_, String>(1)

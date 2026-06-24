@@ -1,6 +1,6 @@
 use crate::commands::notifications::Notification;
 use crate::db::Database;
-use chrono::Local;
+use chrono::Utc;
 use lettre::message::Mailbox;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
@@ -122,7 +122,7 @@ pub(crate) fn send_ready_email_notification_inner(
     conn: &Connection,
     repair_id: &str,
 ) -> Result<Notification, String> {
-    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     let (customer_name, customer_email, device_brand, device_model, device_type): (
         String,
@@ -227,7 +227,7 @@ pub(crate) fn send_custom_email_inner(
     subject: &str,
     message: &str,
 ) -> Result<Notification, String> {
-    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     let (customer_name, customer_email): (String, Option<String>) = conn
         .query_row(
@@ -277,9 +277,10 @@ pub(crate) fn send_custom_email_inner(
 #[tauri::command]
 pub fn send_ready_email_notification(
     repair_id: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Notification, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     send_ready_email_notification_inner(&conn, &repair_id)
 }
 
@@ -288,8 +289,9 @@ pub fn send_custom_email(
     repair_id: String,
     subject: String,
     message: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Notification, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     send_custom_email_inner(&conn, &repair_id, &subject, &message)
 }

@@ -6,6 +6,7 @@ import { Input, Select } from '../components/Input'
 import { Button } from '../components/Button'
 import type { RepairWithCustomer, CreateQuotationItemInput } from '../types'
 import { displayPhone } from '../lib/phone'
+import { mapError } from '../lib/mapError'
 
 interface ItemRow {
   key: number
@@ -66,8 +67,8 @@ export function QuotationBuilder() {
           )
         }
         setLoading(false)
-      }).catch((e) => { if (mounted.current) { setError(String(e)); setLoading(false) } })
-    }).catch((e) => { if (mounted.current) { setError(String(e)); setLoading(false) } })
+      }).catch((e) => { if (mounted.current) { setError(mapError(e)); setLoading(false) } })
+    }).catch((e) => { if (mounted.current) { setError(mapError(e)); setLoading(false) } })
     return () => { mounted.current = false }
   }, [repairId])
 
@@ -92,10 +93,6 @@ export function QuotationBuilder() {
       setError('Add at least one item with a type, description, and price.')
       return
     }
-    if (validItems.length > 2) {
-      setError('Maximum 2 items allowed.')
-      return
-    }
     setSaving(true)
     setError('')
     try {
@@ -113,7 +110,7 @@ export function QuotationBuilder() {
       try { await api.pdf.openFile(path) } catch { /* non-fatal */ }
       navigate('repair-detail', { repairId })
     } catch (e) {
-      setError(String(e))
+      setError(mapError(e))
     } finally {
       setSaving(false)
     }

@@ -1,3 +1,4 @@
+
 mod commands;
 mod db;
 mod pdf;
@@ -96,7 +97,6 @@ pub fn run() {
             commands::auth::list_users,
             commands::auth::update_user,
             commands::auth::delete_user,
-            commands::auth::change_password,
             commands::backup::backup_database,
             commands::backup::restore_database,
             commands::backup::list_backups,

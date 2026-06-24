@@ -6,6 +6,7 @@ import { LiquidPanel, LiquidButton } from '../components/liquid'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { ArrowLeft, CheckCircle2, MessageSquare, Mail } from 'lucide-react'
 import type { Customer } from '../types'
+import { mapError } from '../lib/mapError'
 
 const staggerContainer = {
   hidden: { opacity: 0 },
@@ -58,7 +59,7 @@ export function NewCampaign() {
       setSuccess(true)
       setTimeout(() => navigate('communications'), 1500)
     } catch (e) {
-      setError(String(e))
+      setError(mapError(e))
     } finally {
       setCreating(false)
     }

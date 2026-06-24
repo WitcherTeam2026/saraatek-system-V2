@@ -4,6 +4,7 @@ import { api } from '../lib/api'
 import { LiquidPanel } from '../components/liquid'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { Database, Server, RefreshCw, HardDrive, Table, CheckCircle, AlertTriangle, XCircle } from 'lucide-react'
+import { mapError } from '../lib/mapError'
 
 const staggerContainer = {
   hidden: { opacity: 0 },
@@ -68,7 +69,7 @@ export function DatabaseMonitor() {
       setTables(tablesData)
       setLastRefresh(new Date())
     } catch (e) {
-      setError(String(e))
+      setError(mapError(e))
     } finally {
       setLoading(false)
     }
@@ -80,7 +81,7 @@ export function DatabaseMonitor() {
       setTableInfo(info)
       setSelectedTable(tableName)
     } catch (e) {
-      setError(String(e))
+      setError(mapError(e))
     }
   }
 

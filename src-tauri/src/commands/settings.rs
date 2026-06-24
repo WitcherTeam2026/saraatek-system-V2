@@ -31,14 +31,16 @@ pub(crate) fn save_setting_inner(conn: &Connection, key: &str, value: &str) -> R
 }
 
 #[tauri::command]
-pub fn get_all_settings(db: State<Database>) -> Result<HashMap<String, String>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn get_all_settings(token: String, db: State<Database>) -> Result<HashMap<String, String>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     get_all_settings_inner(&conn)
 }
 
 #[tauri::command]
-pub fn save_setting(key: String, value: String, db: State<Database>) -> Result<(), String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn save_setting(key: String, value: String, token: String, db: State<Database>) -> Result<(), String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     save_setting_inner(&conn, &key, &value)
 }
 

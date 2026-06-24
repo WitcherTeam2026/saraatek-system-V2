@@ -1,5 +1,7 @@
 use crate::commands::supabase_sync::{SupabaseClient, SupabaseConfig, SyncStatus};
+use crate::db::Database;
 use serde::{Deserialize, Serialize};
+use tauri::State;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SupabaseSettings {
@@ -11,7 +13,8 @@ pub struct SupabaseSettings {
 }
 
 #[tauri::command]
-pub fn get_supabase_settings() -> Result<SupabaseSettings, String> {
+pub fn get_supabase_settings(token: String, db: State<Database>) -> Result<SupabaseSettings, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
     let config_dir = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("saraatek");
@@ -34,7 +37,8 @@ pub fn get_supabase_settings() -> Result<SupabaseSettings, String> {
 }
 
 #[tauri::command]
-pub fn save_supabase_settings(settings: SupabaseSettings) -> Result<(), String> {
+pub fn save_supabase_settings(settings: SupabaseSettings, token: String, db: State<Database>) -> Result<(), String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
     let config_dir = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("saraatek");
@@ -52,7 +56,8 @@ pub fn save_supabase_settings(settings: SupabaseSettings) -> Result<(), String> 
 }
 
 #[tauri::command]
-pub async fn test_supabase_connection(settings: SupabaseSettings) -> Result<bool, String> {
+pub async fn test_supabase_connection(settings: SupabaseSettings, token: String, db: State<'_, Database>) -> Result<bool, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
     let config = SupabaseConfig {
         url: settings.url,
         anon_key: settings.anon_key,
@@ -69,7 +74,10 @@ pub async fn sync_to_cloud(
     settings: SupabaseSettings,
     table_name: String,
     records: Vec<serde_json::Value>,
+    token: String,
+    db: State<'_, Database>,
 ) -> Result<SyncStatus, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
     let config = SupabaseConfig {
         url: settings.url,
         anon_key: settings.anon_key,
@@ -85,7 +93,10 @@ pub async fn sync_to_cloud(
 pub async fn sync_from_cloud(
     settings: SupabaseSettings,
     table_name: String,
+    token: String,
+    db: State<'_, Database>,
 ) -> Result<Vec<serde_json::Value>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
     let config = SupabaseConfig {
         url: settings.url,
         anon_key: settings.anon_key,
@@ -101,7 +112,10 @@ pub async fn sync_from_cloud(
 pub async fn backup_to_cloud(
     settings: SupabaseSettings,
     db_path: String,
+    token: String,
+    db: State<'_, Database>,
 ) -> Result<String, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
     let config = SupabaseConfig {
         url: settings.url,
         anon_key: settings.anon_key,
@@ -114,7 +128,8 @@ pub async fn backup_to_cloud(
 }
 
 #[tauri::command]
-pub fn get_sync_status() -> Result<SyncStatus, String> {
+pub fn get_sync_status(token: String, db: State<Database>) -> Result<SyncStatus, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
     let config_dir = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("saraatek");

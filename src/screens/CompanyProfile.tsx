@@ -96,7 +96,7 @@ export function CompanyProfile() {
           notes: notes.trim() || null,
           credit_terms: creditTerms.trim() || null,
         })
-        if (mounted.current) navigate('company-profile', { companyId: newCompany.id } as any)
+        if (mounted.current) navigate('company-profile', { companyId: newCompany.id })
       }
     } catch (e) {
       if (mounted.current) setError('Failed to save: ' + String(e))

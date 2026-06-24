@@ -63,8 +63,9 @@ pub struct CompanyFilter {
 }
 
 #[tauri::command]
-pub fn create_company(input: CreateCompanyInput, db: State<Database>) -> Result<Company, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn create_company(input: CreateCompanyInput, token: String, db: State<Database>) -> Result<Company, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     conn.execute(
         "INSERT INTO companies (name, phone, email, address, tax_id, registration_number, website, industry, notes, tags, credit_terms, credit_limit) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         params![
@@ -89,8 +90,9 @@ pub fn create_company(input: CreateCompanyInput, db: State<Database>) -> Result<
 }
 
 #[tauri::command]
-pub fn update_company(input: UpdateCompanyInput, db: State<Database>) -> Result<Company, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn update_company(input: UpdateCompanyInput, token: String, db: State<Database>) -> Result<Company, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
     if let Some(name) = input.name {
         conn.execute(
@@ -187,8 +189,9 @@ pub fn update_company(input: UpdateCompanyInput, db: State<Database>) -> Result<
 }
 
 #[tauri::command]
-pub fn list_companies(filter: CompanyFilter, db: State<Database>) -> Result<Vec<Company>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn list_companies(filter: CompanyFilter, token: String, db: State<Database>) -> Result<Vec<Company>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     let mut query = "SELECT * FROM companies WHERE 1=1".to_string();
 
     if let Some(search) = filter.search {
@@ -241,8 +244,9 @@ pub fn list_companies(filter: CompanyFilter, db: State<Database>) -> Result<Vec<
 }
 
 #[tauri::command]
-pub fn get_company(id: i64, db: State<Database>) -> Result<Option<Company>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn get_company(id: i64, token: String, db: State<Database>) -> Result<Option<Company>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     get_company_by_id(id, &conn).map(Some)
 }
 
@@ -276,9 +280,10 @@ fn get_company_by_id(id: i64, conn: &rusqlite::Connection) -> Result<Company, St
 #[tauri::command]
 pub fn search_company_by_phone(
     phone: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Option<Company>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     let result = conn.query_row(
         "SELECT * FROM companies WHERE phone = ?1",
         params![phone],
@@ -311,8 +316,9 @@ pub fn search_company_by_phone(
 }
 
 #[tauri::command]
-pub fn delete_company(id: i64, db: State<Database>) -> Result<(), String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn delete_company(id: i64, token: String, db: State<Database>) -> Result<(), String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     conn.execute("DELETE FROM companies WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
     Ok(())

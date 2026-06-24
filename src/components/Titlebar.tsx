@@ -1,8 +1,8 @@
 import { useAppStore } from '../stores/app'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import type { Screen } from '../types'
 
-const screenTitles: Record<string, string> = {
-  login: 'Sign In',
+const screenTitles: Record<Screen, string> = {
   dashboard: 'Dashboard',
   'new-repair-step1': 'New Repair',
   'new-repair-step2': 'Device Details',
@@ -13,10 +13,25 @@ const screenTitles: Record<string, string> = {
   'warranty-search': 'Warranty Claim',
   reports: 'Reports',
   settings: 'Settings',
-  backup: 'Backup & Restore',
   'company-list': 'Companies',
   'company-profile': 'Company Profile',
   'user-management': 'User Management',
+  accounting: 'Accounting',
+  ledger: 'Ledger',
+  'profit-loss': 'Profit & Loss',
+  'balance-sheet': 'Balance Sheet',
+  'journal-detail': 'Journal Entry',
+  'opening-balances': 'Opening Balances',
+  analytics: 'Analytics',
+  'revenue-analytics': 'Revenue Analytics',
+  'repair-analytics': 'Repair Analytics',
+  'customer-analytics': 'Customer Analytics',
+  'warranty-analytics': 'Warranty Analytics',
+  'ai-message': 'AI Message',
+  communications: 'Communications',
+  'new-campaign': 'New Campaign',
+  documents: 'Documents',
+  'database-monitor': 'Database',
 }
 
 const appWindow = getCurrentWindow()

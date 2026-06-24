@@ -2,7 +2,7 @@ use crate::commands::ai_service;
 use crate::commands::notifications;
 use crate::commands::notifications::Notification;
 use crate::db::Database;
-use chrono::Local;
+use chrono::Utc;
 use rusqlite::Connection;
 use tauri::State;
 
@@ -116,7 +116,7 @@ pub(crate) fn send_custom_notification_inner(
     repair_id: &str,
     message: &str,
 ) -> Result<Notification, String> {
-    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     let customer_phone: String = conn
         .query_row(
@@ -229,9 +229,10 @@ pub fn draft_notification_message(
     mode: String,
     goal: Option<String>,
     channel: Option<String>,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<String, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     draft_notification_message_inner(
         &conn,
         &repair_id,
@@ -245,14 +246,16 @@ pub fn draft_notification_message(
 pub fn send_custom_notification(
     repair_id: String,
     message: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Notification, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     send_custom_notification_inner(&conn, &repair_id, &message)
 }
 
 #[tauri::command]
-pub fn summarize_customer_history(customer_id: i64, db: State<Database>) -> Result<String, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn summarize_customer_history(customer_id: i64, token: String, db: State<Database>) -> Result<String, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     summarize_customer_history_inner(&conn, customer_id)
 }

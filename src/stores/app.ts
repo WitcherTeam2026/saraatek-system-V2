@@ -1,15 +1,15 @@
 import { create } from 'zustand'
-import { trackAction } from '../lib/intent'
-import { trackScreenVisit } from '../lib/adaptive'
+import { trackNavigation } from '../lib/tracking'
+import type { Screen } from '../types'
 
 interface AppState {
-  currentScreen: string
+  currentScreen: Screen
   selectedRepairId: string | null
   selectedCustomerId: number | null
   selectedCompanyId: number | null
   selectedEntryId: number | null
   selectedTemplateId: number | null
-  navigate: (screen: string, params?: { repairId?: string; customerId?: number; companyId?: number; entryId?: number; templateId?: number }) => void
+  navigate: (screen: Screen, params?: { repairId?: string; customerId?: number; companyId?: number; entryId?: number; templateId?: number }) => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -20,10 +20,8 @@ export const useAppStore = create<AppState>((set) => ({
   selectedEntryId: null,
   selectedTemplateId: null,
   navigate: (screen, params) => {
-    // Track for intent prediction and adaptive layout
-    trackAction(screen)
-    trackScreenVisit(screen)
-    
+    trackNavigation(screen)
+
     set({
       currentScreen: screen,
       selectedRepairId: params?.repairId ?? null,

@@ -6,6 +6,7 @@ import { LiquidPanel, LiquidMetric, RechartsAreaChart } from '../components/liqu
 import { ErrorBanner } from '../components/ErrorBanner'
 import { ArrowLeft, TrendingUp, TrendingDown, DollarSign, Calendar, CreditCard } from 'lucide-react'
 import type { RevenueAnalytics as RevenueAnalyticsType } from '../types'
+import { mapError } from '../lib/mapError'
 
 const staggerContainer = {
   hidden: { opacity: 0 },
@@ -79,7 +80,7 @@ export function RevenueAnalytics() {
     setLoading(true)
     api.reports.revenueAnalytics(startDate, endDate)
       .then((r) => { if (mounted.current) setData(r) })
-      .catch((e) => setError(String(e)))
+      .catch((e) => setError(mapError(e)))
       .finally(() => { if (mounted.current) setLoading(false) })
     return () => { mounted.current = false }
   }, [startDate, endDate])

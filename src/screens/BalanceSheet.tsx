@@ -6,6 +6,7 @@ import { LiquidPanel, LiquidMetric } from '../components/liquid'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { ArrowLeft, Landmark, CreditCard, Scale } from 'lucide-react'
 import type { BalanceSheetReport } from '../types'
+import { mapError } from '../lib/mapError'
 
 const staggerContainer = {
   hidden: { opacity: 0 },
@@ -35,7 +36,7 @@ export function BalanceSheet() {
     setLoading(true)
     api.accounting.getBalanceSheet(asOfDate)
       .then((r) => { if (mounted.current) setReport(r) })
-      .catch((e) => setError(String(e)))
+      .catch((e) => setError(mapError(e)))
       .finally(() => { if (mounted.current) setLoading(false) })
     return () => { mounted.current = false }
   }, [asOfDate])

@@ -1,5 +1,5 @@
 use crate::db::Database;
-use chrono::Local;
+use chrono::Utc;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -57,14 +57,14 @@ pub(crate) fn add_photos_inner(
     file_names: &[String],
 ) -> Result<Vec<Photo>, String> {
     let folder = ensure_photo_folder(conn, repair_id)?;
-    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let mut photos = Vec::new();
 
     for fname in file_names {
         let src = PathBuf::from(fname);
         let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("photo");
         let ext = src.extension().and_then(|s| s.to_str()).unwrap_or("jpg");
-        let timestamp = Local::now().format("%Y%m%d_%H%M%S%3f").to_string();
+        let timestamp = Utc::now().format("%Y%m%d_%H%M%S%3f").to_string();
         let dest_name = format!("{}_{}.{}", stem, timestamp, ext);
         let dest = folder.join(&dest_name);
 
@@ -150,27 +150,31 @@ pub(crate) fn open_photos_folder_inner(
 pub fn add_photos(
     repair_id: String,
     file_names: Vec<String>,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Vec<Photo>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     add_photos_inner(&conn, &repair_id, &file_names)
 }
 
 #[tauri::command]
-pub fn get_photos(repair_id: String, db: State<Database>) -> Result<Vec<Photo>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn get_photos(repair_id: String, token: String, db: State<Database>) -> Result<Vec<Photo>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     get_photos_inner(&conn, &repair_id)
 }
 
 #[tauri::command]
-pub fn delete_photo(photo_id: i64, db: State<Database>) -> Result<(), String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn delete_photo(photo_id: i64, token: String, db: State<Database>) -> Result<(), String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     delete_photo_inner(&conn, photo_id)
 }
 
 #[tauri::command]
-pub fn open_photos_folder(repair_id: String, db: State<Database>) -> Result<String, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn open_photos_folder(repair_id: String, token: String, db: State<Database>) -> Result<String, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     open_photos_folder_inner(&conn, &repair_id)
 }
 

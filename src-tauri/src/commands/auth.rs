@@ -10,6 +10,7 @@ pub struct User {
     pub name: String,
     pub role: String,
     pub is_active: bool,
+    pub must_change_password: bool,
     pub last_login: Option<String>,
     pub created_at: String,
 }
@@ -38,69 +39,153 @@ pub struct CreateUserInput {
     pub pin: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ChangePasswordInput {
+    pub old_password: String,
+    pub new_password: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct LoginResult {
     pub user: User,
     pub session: Session,
 }
 
-// Simple password hashing (for demo - use bcrypt in production)
 fn hash_password(password: &str) -> String {
+    bcrypt::hash(password, 12).expect("failed to hash password with bcrypt")
+}
+
+fn verify_password(password: &str, hash: &str) -> bool {
+    bcrypt::verify(password, hash).unwrap_or(false)
+}
+
+fn is_legacy_hash(hash: &str) -> bool {
+    !hash.starts_with('$')
+}
+
+fn verify_legacy_password(password: &str, hash: &str) -> bool {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
     let mut hasher = DefaultHasher::new();
     password.hash(&mut hasher);
-    format!("{:x}", hasher.finish())
+    format!("{:x}", hasher.finish()) == hash
 }
 
-fn verify_password(password: &str, hash: &str) -> bool {
-    hash_password(password) == hash
-}
+pub fn require_auth(token: &str, db: &Database) -> Result<User, String> {
+    if token.is_empty() {
+        return Err("Authentication required".to_string());
+    }
 
-#[tauri::command]
-pub fn login(input: LoginInput, db: State<Database>) -> Result<LoginResult, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn = db.get_conn()?;
 
-    // Find user
-    let user = conn.query_row(
-        "SELECT id, username, name, role, is_active, last_login, created_at FROM users WHERE username = ?1",
-        params![input.username],
-        |row| {
-            Ok(User {
-                id: row.get(0)?,
-                username: row.get(1)?,
-                name: row.get(2)?,
-                role: row.get(3)?,
-                is_active: row.get::<_, i32>(4)? == 1,
-                last_login: row.get(5)?,
-                created_at: row.get(6)?,
-            })
-        },
-    )
-    .map_err(|e| match e {
-        rusqlite::Error::QueryReturnedNoRows => "Invalid username or password".to_string(),
-        _ => e.to_string(),
-    })?;
+    let session: Session = conn
+        .query_row(
+            "SELECT id, user_id, token, expires_at, created_at FROM sessions WHERE token = ?1",
+            params![token],
+            |row| {
+                Ok(Session {
+                    id: row.get(0)?,
+                    user_id: row.get(1)?,
+                    token: row.get(2)?,
+                    expires_at: row.get(3)?,
+                    created_at: row.get(4)?,
+                })
+            },
+        )
+        .map_err(|_| "Invalid or expired session".to_string())?;
+
+    let now = chrono::Utc::now()
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
+    if session.expires_at < now {
+        return Err("Session expired".to_string());
+    }
+
+    let user = conn
+        .query_row(
+            "SELECT id, username, name, role, is_active, must_change_password, last_login, created_at FROM users WHERE id = ?1",
+            params![session.user_id],
+            |row| {
+                Ok(User {
+                    id: row.get(0)?,
+                    username: row.get(1)?,
+                    name: row.get(2)?,
+                    role: row.get(3)?,
+                    is_active: row.get::<_, i32>(4)? == 1,
+                    must_change_password: row.get::<_, i32>(5)? == 1,
+                    last_login: row.get(6)?,
+                    created_at: row.get(7)?,
+                })
+            },
+        )
+        .map_err(|_| "User not found or disabled".to_string())?;
 
     if !user.is_active {
         return Err("Account is disabled".to_string());
     }
 
-    // Verify password
-    let stored_hash: String = conn.query_row(
-        "SELECT password_hash FROM users WHERE username = ?1",
-        params![input.username],
-        |row| row.get(0),
-    )
-    .map_err(|e| e.to_string())?;
+    Ok(user)
+}
 
-    if !verify_password(&input.password, &stored_hash) {
+#[tauri::command]
+pub fn login(input: LoginInput, db: State<Database>) -> Result<LoginResult, String> {
+    let conn = db.get_conn()?;
+
+    let user = conn
+        .query_row(
+            "SELECT id, username, name, role, is_active, must_change_password, last_login, created_at FROM users WHERE username = ?1",
+            params![input.username],
+            |row| {
+                Ok(User {
+                    id: row.get(0)?,
+                    username: row.get(1)?,
+                    name: row.get(2)?,
+                    role: row.get(3)?,
+                    is_active: row.get::<_, i32>(4)? == 1,
+                    must_change_password: row.get::<_, i32>(5)? == 1,
+                    last_login: row.get(6)?,
+                    created_at: row.get(7)?,
+                })
+            },
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => "Invalid username or password".to_string(),
+            _ => e.to_string(),
+        })?;
+
+    if !user.is_active {
+        return Err("Account is disabled".to_string());
+    }
+
+    let stored_hash: String = conn
+        .query_row(
+            "SELECT password_hash FROM users WHERE username = ?1",
+            params![input.username],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let password_valid = if is_legacy_hash(&stored_hash) {
+        verify_legacy_password(&input.password, &stored_hash)
+    } else {
+        verify_password(&input.password, &stored_hash)
+    };
+
+    if !password_valid {
         return Err("Invalid username or password".to_string());
     }
 
-    // Create session
-    let token = format!("{}-{}", user.id, chrono::Local::now().timestamp());
-    let expires_at = chrono::Local::now()
+    if is_legacy_hash(&stored_hash) {
+        let new_hash = hash_password(&input.password);
+        conn.execute(
+            "UPDATE users SET password_hash = ?1 WHERE username = ?2",
+            params![new_hash, input.username],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    let token = uuid::Uuid::new_v4().to_string();
+    let expires_at = chrono::Utc::now()
         .checked_add_signed(chrono::Duration::hours(24))
         .unwrap()
         .format("%Y-%m-%d %H:%M:%S")
@@ -112,7 +197,6 @@ pub fn login(input: LoginInput, db: State<Database>) -> Result<LoginResult, Stri
     )
     .map_err(|e| e.to_string())?;
 
-    // Update last login
     conn.execute(
         "UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?1",
         params![user.id],
@@ -129,22 +213,26 @@ pub fn login(input: LoginInput, db: State<Database>) -> Result<LoginResult, Stri
             user_id: user.id,
             token,
             expires_at,
-            created_at: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+            created_at: chrono::Utc::now()
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string(),
         },
     })
 }
 
 #[tauri::command]
 pub fn logout(token: String, db: State<Database>) -> Result<(), String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     conn.execute("DELETE FROM sessions WHERE token = ?1", params![token])
         .map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn create_user(input: CreateUserInput, db: State<Database>) -> Result<User, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn create_user(input: CreateUserInput, token: String, db: State<Database>) -> Result<User, String> {
+    let _user = require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
     let password_hash = hash_password(&input.password);
     let role = input.role.unwrap_or_else(|| "technician".to_string());
@@ -158,7 +246,7 @@ pub fn create_user(input: CreateUserInput, db: State<Database>) -> Result<User, 
     let id = conn.last_insert_rowid();
 
     conn.query_row(
-        "SELECT id, username, name, role, is_active, last_login, created_at FROM users WHERE id = ?1",
+        "SELECT id, username, name, role, is_active, must_change_password, last_login, created_at FROM users WHERE id = ?1",
         params![id],
         |row| {
             Ok(User {
@@ -167,8 +255,9 @@ pub fn create_user(input: CreateUserInput, db: State<Database>) -> Result<User, 
                 name: row.get(2)?,
                 role: row.get(3)?,
                 is_active: row.get::<_, i32>(4)? == 1,
-                last_login: row.get(5)?,
-                created_at: row.get(6)?,
+                must_change_password: row.get::<_, i32>(5)? == 1,
+                last_login: row.get(6)?,
+                created_at: row.get(7)?,
             })
         },
     )
@@ -176,10 +265,11 @@ pub fn create_user(input: CreateUserInput, db: State<Database>) -> Result<User, 
 }
 
 #[tauri::command]
-pub fn list_users(db: State<Database>) -> Result<Vec<User>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn list_users(token: String, db: State<Database>) -> Result<Vec<User>, String> {
+    let _user = require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     let mut stmt = conn
-        .prepare("SELECT id, username, name, role, is_active, last_login, created_at FROM users ORDER BY name")
+        .prepare("SELECT id, username, name, role, is_active, must_change_password, last_login, created_at FROM users ORDER BY name")
         .map_err(|e| e.to_string())?;
 
     let users = stmt
@@ -190,8 +280,9 @@ pub fn list_users(db: State<Database>) -> Result<Vec<User>, String> {
                 name: row.get(2)?,
                 role: row.get(3)?,
                 is_active: row.get::<_, i32>(4)? == 1,
-                last_login: row.get(5)?,
-                created_at: row.get(6)?,
+                must_change_password: row.get::<_, i32>(5)? == 1,
+                last_login: row.get(6)?,
+                created_at: row.get(7)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -207,25 +298,38 @@ pub fn update_user(
     name: Option<String>,
     role: Option<String>,
     is_active: Option<bool>,
+    token: String,
     db: State<Database>,
 ) -> Result<User, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
-    if let Some(name) = name {
-        conn.execute("UPDATE users SET name = ?1 WHERE id = ?2", params![name, id])
-            .map_err(|e| e.to_string())?;
+    // Build dynamic SET clause — only update provided fields
+    let mut sets = Vec::new();
+    let mut values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+    if let Some(name) = &name {
+        sets.push("name = ?");
+        values.push(Box::new(name.clone()));
     }
-    if let Some(role) = role {
-        conn.execute("UPDATE users SET role = ?1 WHERE id = ?2", params![role, id])
-            .map_err(|e| e.to_string())?;
+    if let Some(role) = &role {
+        sets.push("role = ?");
+        values.push(Box::new(role.clone()));
     }
     if let Some(is_active) = is_active {
-        conn.execute("UPDATE users SET is_active = ?1 WHERE id = ?2", params![is_active as i32, id])
+        sets.push("is_active = ?");
+        values.push(Box::new(is_active as i32));
+    }
+
+    if !sets.is_empty() {
+        values.push(Box::new(id));
+        let sql = format!("UPDATE users SET {} WHERE id = ?", sets.join(", "));
+        conn.execute(&sql, rusqlite::params_from_iter(values.iter()))
             .map_err(|e| e.to_string())?;
     }
 
     conn.query_row(
-        "SELECT id, username, name, role, is_active, last_login, created_at FROM users WHERE id = ?1",
+        "SELECT id, username, name, role, is_active, must_change_password, last_login, created_at FROM users WHERE id = ?1",
         params![id],
         |row| {
             Ok(User {
@@ -234,8 +338,9 @@ pub fn update_user(
                 name: row.get(2)?,
                 role: row.get(3)?,
                 is_active: row.get::<_, i32>(4)? == 1,
-                last_login: row.get(5)?,
-                created_at: row.get(6)?,
+                must_change_password: row.get::<_, i32>(5)? == 1,
+                last_login: row.get(6)?,
+                created_at: row.get(7)?,
             })
         },
     )
@@ -243,12 +348,46 @@ pub fn update_user(
 }
 
 #[tauri::command]
-pub fn delete_user(id: i64, db: State<Database>) -> Result<(), String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn delete_user(id: i64, token: String, db: State<Database>) -> Result<(), String> {
+    let _user = require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     conn.execute("DELETE FROM sessions WHERE user_id = ?1", params![id])
         .map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM users WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn change_password(input: ChangePasswordInput, token: String, db: State<Database>) -> Result<(), String> {
+    let user = require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
+
+    let stored_hash: String = conn
+        .query_row(
+            "SELECT password_hash FROM users WHERE id = ?1",
+            params![user.id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let valid = if is_legacy_hash(&stored_hash) {
+        verify_legacy_password(&input.old_password, &stored_hash)
+    } else {
+        verify_password(&input.old_password, &stored_hash)
+    };
+
+    if !valid {
+        return Err("Current password is incorrect".to_string());
+    }
+
+    let new_hash = hash_password(&input.new_password);
+    conn.execute(
+        "UPDATE users SET password_hash = ?1, must_change_password = 0 WHERE id = ?2",
+        params![new_hash, user.id],
+    )
+    .map_err(|e| e.to_string())?;
+
     Ok(())
 }
 
@@ -289,5 +428,17 @@ mod tests {
         let hash = hash_password("test123");
         assert!(verify_password("test123", &hash));
         assert!(!verify_password("wrong", &hash));
+    }
+
+    #[test]
+    fn test_bcrypt_hash_starts_with_dollar() {
+        let hash = hash_password("test123");
+        assert!(hash.starts_with('$'));
+    }
+
+    #[test]
+    fn test_is_legacy_hash() {
+        assert!(is_legacy_hash("a1b2c3d4e5f6"));
+        assert!(!is_legacy_hash("$2b$12$LJ3m4ys3Lz2YlQN4S9RzOu"));
     }
 }

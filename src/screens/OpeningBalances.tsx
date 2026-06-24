@@ -6,6 +6,7 @@ import { LiquidButton, LiquidPanel } from '../components/liquid'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { ArrowLeft, CheckCircle2, AlertTriangle } from 'lucide-react'
 import type { Account, AccountBalance } from '../types'
+import { mapError } from '../lib/mapError'
 
 const staggerContainer = {
   hidden: { opacity: 0 },
@@ -110,7 +111,7 @@ export function OpeningBalances() {
       setSuccess('Opening balances saved successfully')
       setHasExisting(true)
     } catch (e) {
-      setError(String(e))
+      setError(mapError(e))
     } finally {
       setSaving(false)
     }
@@ -126,7 +127,7 @@ export function OpeningBalances() {
       setValues({})
       setSuccess('Opening balances deleted')
     } catch (e) {
-      setError(String(e))
+      setError(mapError(e))
     } finally {
       setSaving(false)
     }

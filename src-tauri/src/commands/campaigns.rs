@@ -40,7 +40,7 @@ pub(crate) fn create_campaign_inner(
     conn: &rusqlite::Connection,
     input: &CreateCampaignInput,
 ) -> Result<Campaign, String> {
-    let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     // Get customer IDs
     let customer_ids = if let Some(ids) = &input.customer_ids {
@@ -113,15 +113,17 @@ pub(crate) fn create_campaign_inner(
 #[tauri::command]
 pub fn create_campaign(
     input: CreateCampaignInput,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Campaign, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     create_campaign_inner(&conn, &input)
 }
 
 #[tauri::command]
-pub fn list_campaigns(db: State<Database>) -> Result<Vec<Campaign>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn list_campaigns(token: String, db: State<Database>) -> Result<Vec<Campaign>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
     let mut stmt = conn
         .prepare(
@@ -157,9 +159,10 @@ pub fn list_campaigns(db: State<Database>) -> Result<Vec<Campaign>, String> {
 #[tauri::command]
 pub fn get_campaign_recipients(
     campaign_id: i64,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Vec<CampaignRecipient>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
     let mut stmt = conn
         .prepare(
@@ -193,9 +196,10 @@ pub fn get_campaign_recipients(
 #[tauri::command]
 pub fn send_campaign(
     campaign_id: i64,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Campaign, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
     // Get campaign details
     let campaign = conn
@@ -251,7 +255,7 @@ pub fn send_campaign(
 
     // Send to each recipient
     for (recipient_id, _customer_id, _customer_name, phone) in &recipients {
-        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
         // Try to send via Fonnte (WhatsApp)
         if campaign.channel == "whatsapp" {

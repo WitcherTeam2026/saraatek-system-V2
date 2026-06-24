@@ -28,8 +28,9 @@ pub struct CreateContactInput {
 }
 
 #[tauri::command]
-pub fn create_contact(input: CreateContactInput, db: State<Database>) -> Result<Contact, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn create_contact(input: CreateContactInput, token: String, db: State<Database>) -> Result<Contact, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     conn.execute(
         "INSERT INTO contacts (company_id, name, position, phone, email, is_primary, notes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![
@@ -49,8 +50,9 @@ pub fn create_contact(input: CreateContactInput, db: State<Database>) -> Result<
 }
 
 #[tauri::command]
-pub fn list_contacts(company_id: i64, db: State<Database>) -> Result<Vec<Contact>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn list_contacts(company_id: i64, token: String, db: State<Database>) -> Result<Vec<Contact>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     let mut stmt = conn
         .prepare("SELECT * FROM contacts WHERE company_id = ?1 ORDER BY is_primary DESC, name ASC")
         .map_err(|e| e.to_string())?;
@@ -85,9 +87,10 @@ pub fn update_contact(
     email: Option<String>,
     is_primary: Option<bool>,
     notes: Option<String>,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Contact, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
     if let Some(name) = name {
         conn.execute(
@@ -136,8 +139,9 @@ pub fn update_contact(
 }
 
 #[tauri::command]
-pub fn delete_contact(id: i64, db: State<Database>) -> Result<(), String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn delete_contact(id: i64, token: String, db: State<Database>) -> Result<(), String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     conn.execute("DELETE FROM contacts WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
     Ok(())

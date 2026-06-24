@@ -6,6 +6,7 @@ import { Input, Select } from '../components/Input'
 import { Button } from '../components/Button'
 import type { RepairWithCustomer, QuotationItem, CreateQuotationItemInput } from '../types'
 import { displayPhone } from '../lib/phone'
+import { mapError } from '../lib/mapError'
 
 interface ItemRow {
   key: number
@@ -123,13 +124,13 @@ export function InvoiceBuilder() {
               setItems([freshItem(r), freshItem(r)])
             }
             setLoading(false)
-          }).catch((e) => { if (mounted.current) { setError(String(e)); setLoading(false) } })
+          }).catch((e) => { if (mounted.current) { setError(mapError(e)); setLoading(false) } })
         } else {
           setItems([freshItem(r), freshItem(r)])
           setLoading(false)
         }
-      }).catch((e) => { if (mounted.current) { setError(String(e)); setLoading(false) } })
-    }).catch((e) => { if (mounted.current) { setError(String(e)); setLoading(false) } })
+      }).catch((e) => { if (mounted.current) { setError(mapError(e)); setLoading(false) } })
+    }).catch((e) => { if (mounted.current) { setError(mapError(e)); setLoading(false) } })
     return () => { mounted.current = false }
   }, [repairId])
 
@@ -152,10 +153,6 @@ export function InvoiceBuilder() {
     const validItems = items.filter((it) => it.description.trim() && it.unit_price > 0 && it.item_type)
     if (validItems.length === 0) {
       setError('Add at least one item with a type, description, and price.')
-      return
-    }
-    if (validItems.length > 2) {
-      setError('Maximum 2 items allowed.')
       return
     }
     setSaving(true)
@@ -189,7 +186,7 @@ export function InvoiceBuilder() {
       })
       navigate('repair-detail', { repairId })
     } catch (e) {
-      setError(String(e))
+      setError(mapError(e))
     } finally {
       setSaving(false)
     }

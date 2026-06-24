@@ -541,7 +541,7 @@ pub(crate) struct RepairPdfData {
 }
 
 fn collect_repair_data(repair_id: &str, db: &Database) -> Result<RepairPdfData, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn = db.get_conn()?;
 
     let rid = repair_id.to_string();
 
@@ -944,6 +944,7 @@ pub struct QuotationPdfItem {
     pub total: f64,
 }
 
+#[allow(dead_code)]
 pub struct QuotationPdfData {
     pub quotation_id: String,
     pub created_at: String,
@@ -1759,7 +1760,7 @@ fn resolve_output_dir(
     save_as: bool,
 ) -> Result<String, String> {
     let pdf_output_dir: String = {
-        let conn = db.conn.lock().map_err(|e| e.to_string())?;
+        let conn = db.get_conn()?;
         conn.query_row(
             "SELECT value FROM shop_settings WHERE key = 'pdf_output_dir'",
             [],
@@ -1782,7 +1783,7 @@ fn resolve_output_dir(
                     .and_then(|path| path.to_str())
                     .ok_or_else(|| "Invalid PDF output path — not valid UTF-8".to_string())?
                     .to_string();
-                let conn = db.conn.lock().map_err(|e| e.to_string())?;
+                let conn = db.get_conn()?;
                 conn.execute(
                     "INSERT OR REPLACE INTO shop_settings (key, value) VALUES ('pdf_output_dir', ?)",
                     params![dir],
@@ -1803,9 +1804,10 @@ fn resolve_output_dir(
 pub fn generate_intake_pdf(
     repair_id: String,
     save_as: bool,
-    db: tauri::State<Database>,
+    token: String, db: tauri::State<Database>,
     app: tauri::AppHandle,
 ) -> Result<String, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
     let data = collect_repair_data(&repair_id, db.inner())?;
     let output_dir = resolve_output_dir(db.inner(), &app, save_as)?;
 
@@ -1824,7 +1826,7 @@ fn build_quotation_pdf_data(
     db: &Database,
     is_invoice: bool,
 ) -> Result<QuotationPdfData, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn = db.get_conn()?;
 
     let (
         customer_name,
@@ -1931,8 +1933,8 @@ fn build_quotation_pdf_data(
     drop(stmt);
 
     let id_str = repair_id.to_string();
-    let now_str = chrono::Local::now().format("%Y-%m-%d").to_string();
-    let valid_str = (chrono::Local::now() + chrono::Duration::days(30))
+    let now_str = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let valid_str = (chrono::Utc::now() + chrono::Duration::days(30))
         .format("%Y-%m-%d")
         .to_string();
 
@@ -1983,7 +1985,8 @@ fn build_quotation_pdf_data(
 /// was just generated, instead of leaving the technician to dig through
 /// the output folder manually.
 #[tauri::command]
-pub fn open_file_path(path: String) -> Result<(), String> {
+pub fn open_file_path(path: String, token: String, db: tauri::State<Database>) -> Result<(), String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
     if !std::path::Path::new(&path).exists() {
         return Err(format!("File not found: {path}"));
     }
@@ -1998,9 +2001,10 @@ pub fn open_file_path(path: String) -> Result<(), String> {
 pub fn generate_quotation_pdf_file(
     repair_id: String,
     save_as: bool,
-    db: tauri::State<Database>,
+    token: String, db: tauri::State<Database>,
     app: tauri::AppHandle,
 ) -> Result<String, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
     let data = build_quotation_pdf_data(&repair_id, db.inner(), false)?;
     let output_dir = resolve_output_dir(db.inner(), &app, save_as)?;
 
@@ -2018,9 +2022,10 @@ pub fn generate_quotation_pdf_file(
 pub fn generate_invoice_pdf_file(
     repair_id: String,
     save_as: bool,
-    db: tauri::State<Database>,
+    token: String, db: tauri::State<Database>,
     app: tauri::AppHandle,
 ) -> Result<String, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
     let data = build_quotation_pdf_data(&repair_id, db.inner(), true)?;
     let output_dir = resolve_output_dir(db.inner(), &app, save_as)?;
     let safe_id = repair_id.replace('/', "-");
@@ -2166,7 +2171,7 @@ fn get_pdf_setting(conn: &rusqlite::Connection, key: &str, default: &str) -> Str
 }
 
 fn build_template_data(repair_id: &str, db: &Database, doc_type: &str) -> Result<PdfTemplateData, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn = db.get_conn()?;
 
     let (customer_name, customer_phone, customer_address, device_type, device_brand, device_model, device_serial, reported_problem): (String, String, Option<String>, Option<String>, String, Option<String>, Option<String>, Option<String>) = conn
         .query_row(
@@ -2202,7 +2207,7 @@ fn build_template_data(repair_id: &str, db: &Database, doc_type: &str) -> Result
     Ok(PdfTemplateData {
         doc_type: doc_type.to_string(),
         repair_id: quotation_no,
-        date: chrono::Local::now().format("%Y-%m-%d").to_string(),
+        date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
         company_name: get_pdf_setting(&conn, "company_name", "saraa TEK"),
         company_address: get_pdf_setting(&conn, "company_address", "539/8 Madamandiya, Dedigamuwa"),
         company_email: get_pdf_setting(&conn, "company_email", "saraatek25@gmail.com"),
@@ -2311,9 +2316,10 @@ img {
 pub fn generate_quotation_pdf_html(
     repair_id: String,
     save_as: bool,
-    db: tauri::State<Database>,
+    token: String, db: tauri::State<Database>,
     app: tauri::AppHandle,
 ) -> Result<String, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
     let data = build_template_data(&repair_id, db.inner(), "QUOTATION")?;
     let html = render_template("quotation.html", &data)?;
     let output_dir = resolve_output_dir(db.inner(), &app, save_as)?;
@@ -2327,9 +2333,10 @@ pub fn generate_quotation_pdf_html(
 pub fn generate_invoice_pdf_html(
     repair_id: String,
     save_as: bool,
-    db: tauri::State<Database>,
+    token: String, db: tauri::State<Database>,
     app: tauri::AppHandle,
 ) -> Result<String, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
     let data = build_template_data(&repair_id, db.inner(), "INVOICE")?;
     let html = render_template("invoice.html", &data)?;
     let output_dir = resolve_output_dir(db.inner(), &app, save_as)?;

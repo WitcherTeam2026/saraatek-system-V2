@@ -3,6 +3,7 @@ import { api } from '../lib/api'
 import { Modal } from './Modal'
 import { Input, Select } from './Input'
 import { Button } from './Button'
+import { mapError } from '../lib/mapError'
 
 interface PaymentModalProps {
   open: boolean
@@ -26,7 +27,7 @@ export function PaymentModal({ open, onClose, repairId, grandTotal, onSuccess }:
     try {
       await api.payments.record({ repair_id: repairId, amount: parsed, method, note: note || null })
       onSuccess(); onClose()
-    } catch (e) { setError(String(e)) }
+    } catch (e) { setError(mapError(e)) }
     finally { setSaving(false) }
   }
 

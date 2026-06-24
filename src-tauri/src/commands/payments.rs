@@ -1,5 +1,5 @@
 use crate::db::Database;
-use chrono::Local;
+use chrono::Utc;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -26,8 +26,8 @@ pub(crate) fn record_payment_inner(
     conn: &Connection,
     input: &RecordPaymentInput,
 ) -> Result<Payment, String> {
-    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-    let today = Local::now().format("%Y-%m-%d").to_string();
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let today = Utc::now().format("%Y-%m-%d").to_string();
 
     conn.execute(
         "INSERT INTO payments (repair_id, amount, method, paid_at, note) VALUES (?, ?, ?, ?, ?)",
@@ -136,7 +136,7 @@ pub(crate) fn get_payment_inner(
 ) -> Result<Option<Payment>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, repair_id, amount, method, paid_at, note FROM payments WHERE repair_id = ?",
+            "SELECT id, repair_id, amount, method, paid_at, note FROM payments WHERE repair_id = ? ORDER BY id DESC LIMIT 1",
         )
         .map_err(|e| e.to_string())?;
 
@@ -157,14 +157,16 @@ pub(crate) fn get_payment_inner(
 }
 
 #[tauri::command]
-pub fn record_payment(input: RecordPaymentInput, db: State<Database>) -> Result<Payment, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn record_payment(input: RecordPaymentInput, token: String, db: State<Database>) -> Result<Payment, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     record_payment_inner(&conn, &input)
 }
 
 #[tauri::command]
-pub fn get_payment(repair_id: String, db: State<Database>) -> Result<Option<Payment>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn get_payment(repair_id: String, token: String, db: State<Database>) -> Result<Option<Payment>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     get_payment_inner(&conn, &repair_id)
 }
 
@@ -201,7 +203,7 @@ mod tests {
             );
             CREATE TABLE payments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                repair_id TEXT NOT NULL UNIQUE REFERENCES repairs(id),
+                repair_id TEXT NOT NULL REFERENCES repairs(id),
                 amount REAL NOT NULL,
                 method TEXT NOT NULL,
                 paid_at DATETIME NOT NULL,
@@ -214,6 +216,29 @@ mod tests {
                 start_date DATE NOT NULL,
                 expiry_date DATE NOT NULL,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE chart_of_accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL,
+                type TEXT NOT NULL CHECK(type IN ('asset','liability','equity','income','cogs','expense'))
+            );
+            CREATE TABLE journal_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                entry_date DATE NOT NULL,
+                description TEXT NOT NULL,
+                source_type TEXT,
+                source_id TEXT,
+                is_posted INTEGER DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE journal_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                entry_id INTEGER NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
+                account_id INTEGER NOT NULL REFERENCES chart_of_accounts(id),
+                debit REAL DEFAULT 0,
+                credit REAL DEFAULT 0,
+                note TEXT
             );",
         )
         .unwrap();
@@ -221,6 +246,21 @@ mod tests {
     }
 
     fn seed_repair(conn: &Connection) -> String {
+        conn.execute(
+            "INSERT INTO chart_of_accounts (code, name, type) VALUES ('1000', 'Cash', 'asset')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO chart_of_accounts (code, name, type) VALUES ('1100', 'Bank Account', 'asset')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO chart_of_accounts (code, name, type) VALUES ('4000', 'Repair Revenue', 'income')",
+            [],
+        )
+        .unwrap();
         conn.execute(
             "INSERT INTO customers (type, name, phone) VALUES ('individual', 'Test', '0000000000')",
             [],

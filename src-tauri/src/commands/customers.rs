@@ -115,17 +115,19 @@ pub(crate) fn create_customer_inner(
 }
 
 #[tauri::command]
-pub fn search_customer(phone: String, db: State<Database>) -> Result<Option<Customer>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn search_customer(phone: String, token: String, db: State<Database>) -> Result<Option<Customer>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     search_customer_inner(&conn, &phone)
 }
 
 #[tauri::command]
 pub fn create_customer(
     input: CreateCustomerInput,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Customer, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     create_customer_inner(&conn, &input)
 }
 
@@ -167,9 +169,10 @@ pub(crate) fn update_customer_address_inner(
 pub fn update_customer_address(
     customer_id: i64,
     address: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Customer, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     update_customer_address_inner(&conn, customer_id, &address)
 }
 

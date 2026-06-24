@@ -76,23 +76,26 @@ pub(crate) fn toggle_technician_active_inner(conn: &Connection, id: i64) -> Resu
 }
 
 #[tauri::command]
-pub fn list_technicians(db: State<Database>) -> Result<Vec<Technician>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn list_technicians(token: String, db: State<Database>) -> Result<Vec<Technician>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     list_technicians_inner(&conn)
 }
 
 #[tauri::command]
 pub fn create_technician(
     input: CreateTechnicianInput,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Technician, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     create_technician_inner(&conn, &input)
 }
 
 #[tauri::command]
-pub fn toggle_technician_active(id: i64, db: State<Database>) -> Result<(), String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn toggle_technician_active(id: i64, token: String, db: State<Database>) -> Result<(), String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     toggle_technician_active_inner(&conn, id)
 }
 

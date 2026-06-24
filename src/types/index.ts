@@ -1,3 +1,48 @@
+export type Screen =
+  | 'dashboard'
+  | 'new-repair-step1'
+  | 'new-repair-step2'
+  | 'repair-detail'
+  | 'repairs-list'
+  | 'settings'
+  | 'quotation-builder'
+  | 'invoice-builder'
+  | 'warranty-search'
+  | 'reports'
+  | 'company-list'
+  | 'company-profile'
+  | 'user-management'
+  | 'accounting'
+  | 'ledger'
+  | 'profit-loss'
+  | 'balance-sheet'
+  | 'journal-detail'
+  | 'opening-balances'
+  | 'analytics'
+  | 'revenue-analytics'
+  | 'repair-analytics'
+  | 'customer-analytics'
+  | 'warranty-analytics'
+  | 'ai-message'
+  | 'communications'
+  | 'new-campaign'
+  | 'documents'
+  | 'database-monitor'
+
+export interface DashboardCounts {
+  open_repairs: number
+  awaiting_approval: number
+  repairing: number
+  ready_for_collection: number
+}
+
+export interface RecentActivity {
+  type: string
+  id: string
+  status: string
+  created_at: string
+}
+
 export interface Customer {
   id: number
   type: 'individual' | 'business'
@@ -361,6 +406,7 @@ export interface User {
   name: string
   role: 'admin' | 'manager' | 'technician' | 'front_desk'
   is_active: boolean
+  must_change_password: boolean
   last_login: string | null
   created_at: string
 }

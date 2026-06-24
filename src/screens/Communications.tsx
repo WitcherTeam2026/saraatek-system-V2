@@ -6,6 +6,7 @@ import { LiquidPanel, LiquidButton, LiquidMetric } from '../components/liquid'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { MessageSquare, Mail, Users, BarChart3, Plus, Search, Clock, CheckCircle2, XCircle } from 'lucide-react'
 import type { IncomingMessage, Campaign } from '../types'
+import { mapError } from '../lib/mapError'
 
 const staggerContainer = {
   hidden: { opacity: 0 },
@@ -45,7 +46,7 @@ export function Communications() {
         if (mounted.current) setCampaigns(camps)
       }
     } catch (e) {
-      setError(String(e))
+      setError(mapError(e))
     } finally {
       if (mounted.current) setLoading(false)
     }
@@ -316,7 +317,7 @@ function SmsSettings() {
       await api.sms.saveConfig(provider, apiKey, apiUrl, senderId)
       setSuccess('SMS settings saved successfully')
     } catch (e) {
-      setError(String(e))
+      setError(mapError(e))
     } finally {
       setSaving(false)
     }

@@ -159,7 +159,7 @@ export function CompanyList() {
                   {companies.map((company) => (
                     <tr
                       key={company.id}
-                      onClick={() => navigate('company-profile', { companyId: company.id } as any)}
+                      onClick={() => navigate('company-profile', { companyId: company.id })}
                       className="border-b border-white/5 last:border-0 hover:bg-white/[0.02] cursor-pointer transition-colors"
                     >
                       <td className="py-3 pr-3">

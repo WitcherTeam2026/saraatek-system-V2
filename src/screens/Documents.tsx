@@ -6,6 +6,7 @@ import { LiquidPanel, LiquidButton } from '../components/liquid'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { FileText, Plus, Edit3, Trash2, Settings, Palette } from 'lucide-react'
 import type { DocumentTemplate } from '../types'
+import { mapError } from '../lib/mapError'
 
 const staggerContainer = {
   hidden: { opacity: 0 },
@@ -39,7 +40,7 @@ export function Documents() {
       const t = await api.documents.listTemplates()
       if (mounted.current) setTemplates(t)
     } catch (e) {
-      setError(String(e))
+      setError(mapError(e))
     } finally {
       if (mounted.current) setLoading(false)
     }
@@ -51,7 +52,7 @@ export function Documents() {
       await api.documents.deleteTemplate(id)
       setTemplates(templates.filter((t) => t.id !== id))
     } catch (e) {
-      setError(String(e))
+      setError(mapError(e))
     }
   }
 
@@ -111,7 +112,7 @@ export function Documents() {
               <LiquidPanel 
                 title="Document Templates"
                 action={
-                  <LiquidButton size="sm" icon={<Plus size={13} />} onClick={() => navigate('new-template')}>
+                  <LiquidButton size="sm" icon={<Plus size={13} />} onClick={() => {}}>
                     New Template
                   </LiquidButton>
                 }
@@ -148,7 +149,7 @@ export function Documents() {
                         </div>
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => navigate('edit-template', { templateId: template.id })}
+                            onClick={() => {}}
                             className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-text-primary transition-colors"
                           >
                             <Edit3 size={14} />
@@ -230,7 +231,7 @@ function LetterheadSettings() {
       })
       setSuccess('Letterhead settings saved')
     } catch (e) {
-      setError(String(e))
+      setError(mapError(e))
     } finally {
       setSaving(false)
     }
@@ -364,7 +365,7 @@ function PdfTemplateSettings() {
       setSettings(s)
       setLoading(false)
     }).catch((e) => {
-      setError(String(e))
+      setError(mapError(e))
       setLoading(false)
     })
   }, [])
@@ -385,7 +386,7 @@ function PdfTemplateSettings() {
       await api.pdfSettings.saveAll(settingsArray)
       setSuccess('PDF template settings saved')
     } catch (e) {
-      setError(String(e))
+      setError(mapError(e))
     } finally {
       setSaving(false)
     }
@@ -402,7 +403,7 @@ function PdfTemplateSettings() {
       setSettings(s)
       setSuccess('Settings reset to defaults')
     } catch (e) {
-      setError(String(e))
+      setError(mapError(e))
     } finally {
       setSaving(false)
     }

@@ -1,0 +1,23 @@
+{
+  "name": "saraatek-mobile",
+  "version": "1.0.0",
+  "description": "SaraaTEK Mobile App",
+  "main": "index.js",
+  "scripts": {
+    "build": "vite build",
+    "preview": "vite preview --port 4173",
+    "cap:init": "npx cap init saraatek com.saraatek.app --web-dir dist",
+    "cap:add": "npx cap add android",
+    "cap:sync": "npx cap sync",
+    "cap:build": "npx cap build android"
+  },
+  "dependencies": {
+    "vue": "^3.4.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0",
+    "@capacitor/cli": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/android": "^6.0.0"
+  }
+}

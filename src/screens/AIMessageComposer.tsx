@@ -6,6 +6,7 @@ import { LiquidButton, LiquidPanel } from '../components/liquid'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { ArrowLeft, Copy, RefreshCw, MessageSquare, Mail } from 'lucide-react'
 import type { RepairWithCustomer } from '../types'
+import { mapError } from '../lib/mapError'
 
 const staggerContainer = {
   hidden: { opacity: 0 },
@@ -55,7 +56,7 @@ export function AIMessageComposer() {
       )
       setGeneratedMessage(result)
     } catch (e) {
-      setError(String(e))
+      setError(mapError(e))
     } finally {
       setLoading(false)
     }

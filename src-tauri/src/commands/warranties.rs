@@ -1,6 +1,6 @@
 use crate::db::Database;
 use chrono::Datelike;
-use chrono::Local;
+use chrono::Utc;
 use chrono::NaiveDate;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
@@ -33,6 +33,7 @@ pub struct CreateWarrantyInput {
     pub expiry_date: String,
 }
 
+#[allow(dead_code)]
 fn parse_duration_months(duration_label: &str) -> i64 {
     let d = duration_label.to_lowercase();
     let n = d
@@ -51,7 +52,7 @@ pub(crate) fn create_warranty_inner(
     conn: &Connection,
     input: &CreateWarrantyInput,
 ) -> Result<Warranty, String> {
-    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     let start = NaiveDate::parse_from_str(&input.start_date, "%Y-%m-%d")
         .map_err(|e| format!("invalid start_date: {e}"))?;
@@ -158,7 +159,7 @@ pub(crate) fn reopen_warranty_claim_inner(
     conn: &Connection,
     repair_id: &str,
 ) -> Result<(), String> {
-    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     conn.execute(
         "UPDATE repairs SET status = 'Repairing', updated_at = ? WHERE id = ?",
@@ -176,7 +177,7 @@ pub(crate) fn reopen_warranty_claim_inner(
 }
 
 pub(crate) fn check_expired_warranties_inner(conn: &mut Connection) -> Result<i64, String> {
-    let today = Local::now().format("%Y-%m-%d").to_string();
+    let today = Utc::now().format("%Y-%m-%d").to_string();
 
     let expired: Vec<String> = conn
         .prepare(
@@ -194,7 +195,7 @@ pub(crate) fn check_expired_warranties_inner(conn: &mut Connection) -> Result<i6
         return Ok(0);
     }
 
-    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let tx = conn.transaction().map_err(|e| e.to_string())?;
 
     for rid in &expired {
@@ -215,6 +216,7 @@ pub(crate) fn check_expired_warranties_inner(conn: &mut Connection) -> Result<i6
     Ok(expired.len() as i64)
 }
 
+#[allow(dead_code)]
 pub(crate) fn calculate_expiry_date(start: &str, duration_label: &str) -> Result<String, String> {
     let start_date =
         NaiveDate::parse_from_str(start, "%Y-%m-%d").map_err(|e| format!("invalid date: {e}"))?;
@@ -242,36 +244,41 @@ pub(crate) fn calculate_expiry_date(start: &str, duration_label: &str) -> Result
 #[tauri::command]
 pub fn create_warranty(
     input: CreateWarrantyInput,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Warranty, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     create_warranty_inner(&conn, &input)
 }
 
 #[tauri::command]
-pub fn get_warranty(repair_id: String, db: State<Database>) -> Result<Option<Warranty>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn get_warranty(repair_id: String, token: String, db: State<Database>) -> Result<Option<Warranty>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     get_warranty_inner(&conn, &repair_id)
 }
 
 #[tauri::command]
 pub fn search_repair_by_serial(
     serial_number: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Vec<WarrantyWithRepair>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     search_repair_by_serial_inner(&conn, &serial_number)
 }
 
 #[tauri::command]
-pub fn reopen_warranty_claim(repair_id: String, db: State<Database>) -> Result<(), String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn reopen_warranty_claim(repair_id: String, token: String, db: State<Database>) -> Result<(), String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     reopen_warranty_claim_inner(&conn, &repair_id)
 }
 
 #[tauri::command]
-pub fn check_expired_warranties(db: State<Database>) -> Result<i64, String> {
-    let mut conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn check_expired_warranties(token: String, db: State<Database>) -> Result<i64, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let mut conn = db.get_conn()?;
     check_expired_warranties_inner(&mut conn)
 }
 

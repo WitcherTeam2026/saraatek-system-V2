@@ -116,8 +116,9 @@ pub struct OpeningBalanceInput {
 // ── List all accounts ──────────────────────────────────────────────
 
 #[tauri::command]
-pub fn list_accounts(db: State<Database>) -> Result<Vec<Account>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn list_accounts(token: String, db: State<Database>) -> Result<Vec<Account>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     let mut stmt = conn
         .prepare(
             "SELECT id, code, name, type, parent_id, is_active FROM chart_of_accounts ORDER BY code",
@@ -147,8 +148,9 @@ pub fn list_accounts(db: State<Database>) -> Result<Vec<Account>, String> {
 // ── Get account balances as of date ────────────────────────────────
 
 #[tauri::command]
-pub fn get_account_balances(as_of_date: Option<String>, db: State<Database>) -> Result<Vec<AccountBalance>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn get_account_balances(as_of_date: Option<String>, token: String, db: State<Database>) -> Result<Vec<AccountBalance>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     let date_filter = as_of_date.unwrap_or_else(|| "9999-12-31".to_string());
 
     let mut stmt = conn
@@ -193,9 +195,10 @@ pub fn get_account_ledger(
     account_id: i64,
     start_date: Option<String>,
     end_date: Option<String>,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Vec<LedgerEntry>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     let start = start_date.unwrap_or_else(|| "0000-01-01".to_string());
     let end = end_date.unwrap_or_else(|| "9999-12-31".to_string());
 
@@ -247,9 +250,10 @@ pub fn get_account_ledger(
 #[tauri::command]
 pub fn create_journal_entry(
     input: CreateJournalEntryInput,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<JournalEntry, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
     // Validate: debits must equal credits
     let total_debit: f64 = input.items.iter().map(|i| i.debit).sum();
@@ -284,15 +288,16 @@ pub fn create_journal_entry(
         source_type: input.source_type,
         source_id: input.source_id,
         is_posted: true,
-        created_at: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+        created_at: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
     })
 }
 
 // ── Get journal entry with items ───────────────────────────────────
 
 #[tauri::command]
-pub fn get_journal_entry(entry_id: i64, db: State<Database>) -> Result<Option<JournalEntryWithItems>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn get_journal_entry(entry_id: i64, token: String, db: State<Database>) -> Result<Option<JournalEntryWithItems>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
     let entry = conn
         .query_row(
@@ -353,9 +358,10 @@ pub fn list_journal_entries(
     start_date: Option<String>,
     end_date: Option<String>,
     limit: Option<i64>,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Vec<JournalEntry>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     let start = start_date.unwrap_or_else(|| "0000-01-01".to_string());
     let end = end_date.unwrap_or_else(|| "9999-12-31".to_string());
     let limit = limit.unwrap_or(100);
@@ -397,9 +403,10 @@ pub fn list_journal_entries(
 pub fn get_profit_loss(
     start_date: String,
     end_date: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<ProfitLossReport, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
     let mut stmt = conn
         .prepare(
@@ -473,9 +480,10 @@ pub fn get_profit_loss(
 #[tauri::command]
 pub fn get_balance_sheet(
     as_of_date: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<BalanceSheetReport, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
     let mut stmt = conn
         .prepare(
@@ -578,9 +586,10 @@ pub fn get_balance_sheet(
 pub fn save_opening_balances(
     balances: Vec<OpeningBalanceInput>,
     entry_date: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<JournalEntry, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
     // Check if opening balances already exist
     let exists: bool = conn
@@ -651,15 +660,16 @@ pub fn save_opening_balances(
         source_type: Some("opening".to_string()),
         source_id: None,
         is_posted: true,
-        created_at: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+        created_at: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
     })
 }
 
 // ── Check if opening balances exist ────────────────────────────────
 
 #[tauri::command]
-pub fn has_opening_balances(db: State<Database>) -> Result<bool, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn has_opening_balances(token: String, db: State<Database>) -> Result<bool, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     let count: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM journal_entries WHERE source_type = 'opening'",
@@ -673,8 +683,9 @@ pub fn has_opening_balances(db: State<Database>) -> Result<bool, String> {
 // ── Delete opening balances ────────────────────────────────────────
 
 #[tauri::command]
-pub fn delete_opening_balances(db: State<Database>) -> Result<(), String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn delete_opening_balances(token: String, db: State<Database>) -> Result<(), String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
     let entry_id: Option<i64> = conn
         .query_row(

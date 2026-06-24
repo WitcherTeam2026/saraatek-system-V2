@@ -66,8 +66,9 @@ pub struct SaveSignatureInput {
 // ── Templates ──────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn list_templates(db: State<Database>) -> Result<Vec<DocumentTemplate>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn list_templates(token: String, db: State<Database>) -> Result<Vec<DocumentTemplate>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     let mut stmt = conn
         .prepare("SELECT id, name, type, content, is_default, created_at, updated_at FROM document_templates ORDER BY name")
         .map_err(|e| e.to_string())?;
@@ -96,10 +97,11 @@ pub fn list_templates(db: State<Database>) -> Result<Vec<DocumentTemplate>, Stri
 #[tauri::command]
 pub fn create_template(
     input: CreateTemplateInput,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<DocumentTemplate, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
-    let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     conn.execute(
         "INSERT INTO document_templates (name, type, content, is_default, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
@@ -125,10 +127,11 @@ pub fn update_template(
     id: i64,
     name: String,
     content: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<(), String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
-    let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     conn.execute(
         "UPDATE document_templates SET name = ?1, content = ?2, updated_at = ?3 WHERE id = ?4",
@@ -140,8 +143,9 @@ pub fn update_template(
 }
 
 #[tauri::command]
-pub fn delete_template(id: i64, db: State<Database>) -> Result<(), String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn delete_template(id: i64, token: String, db: State<Database>) -> Result<(), String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     conn.execute("DELETE FROM document_templates WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
     Ok(())
@@ -152,10 +156,11 @@ pub fn delete_template(id: i64, db: State<Database>) -> Result<(), String> {
 #[tauri::command]
 pub fn save_signature(
     input: SaveSignatureInput,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Signature, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
-    let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     conn.execute(
         "INSERT INTO signatures (repair_id, customer_name, signature_data, signed_at) VALUES (?1, ?2, ?3, ?4)",
@@ -175,8 +180,9 @@ pub fn save_signature(
 }
 
 #[tauri::command]
-pub fn get_signature(repair_id: String, db: State<Database>) -> Result<Option<Signature>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn get_signature(repair_id: String, token: String, db: State<Database>) -> Result<Option<Signature>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
     let result = conn.query_row(
         "SELECT id, repair_id, customer_name, signature_data, signed_at FROM signatures WHERE repair_id = ?1 ORDER BY signed_at DESC LIMIT 1",
@@ -202,8 +208,9 @@ pub fn get_signature(repair_id: String, db: State<Database>) -> Result<Option<Si
 // ── Letterhead ─────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_letterhead(db: State<Database>) -> Result<LetterheadSettings, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn get_letterhead(token: String, db: State<Database>) -> Result<LetterheadSettings, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
     let result = conn.query_row(
         "SELECT id, logo_path, company_name, address, phone, email, website, primary_color, secondary_color FROM letterhead_settings LIMIT 1",
@@ -249,10 +256,11 @@ pub fn save_letterhead(
     website: Option<String>,
     primary_color: Option<String>,
     secondary_color: Option<String>,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<(), String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
-    let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     let exists: bool = conn
         .query_row("SELECT COUNT(*) FROM letterhead_settings", [], |row| row.get::<_, i64>(0))
@@ -284,10 +292,11 @@ pub fn save_document_version(
     document_id: i64,
     content: String,
     changes: Option<String>,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<DocumentVersion, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
-    let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     // Get next version number
     let version: i64 = conn
@@ -322,9 +331,10 @@ pub fn save_document_version(
 pub fn get_document_versions(
     document_type: String,
     document_id: i64,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Vec<DocumentVersion>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
     let mut stmt = conn
         .prepare(

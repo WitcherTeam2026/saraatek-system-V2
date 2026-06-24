@@ -6,6 +6,7 @@ import { LiquidPanel, LiquidMetric } from '../components/liquid'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { ArrowLeft, Users, UserPlus, Repeat, TrendingUp } from 'lucide-react'
 import type { CustomerAnalytics as CustomerAnalyticsType } from '../types'
+import { mapError } from '../lib/mapError'
 
 const staggerContainer = {
   hidden: { opacity: 0 },
@@ -79,7 +80,7 @@ export function CustomerAnalytics() {
     setLoading(true)
     api.reports.customerAnalytics(startDate, endDate)
       .then((r) => { if (mounted.current) setData(r) })
-      .catch((e) => setError(String(e)))
+      .catch((e) => setError(mapError(e)))
       .finally(() => { if (mounted.current) setLoading(false) })
     return () => { mounted.current = false }
   }, [startDate, endDate])

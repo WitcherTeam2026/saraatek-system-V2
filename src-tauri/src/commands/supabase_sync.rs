@@ -19,6 +19,7 @@ pub struct SyncStatus {
     pub is_connected: bool,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncRecord {
     pub id: String,
@@ -37,6 +38,7 @@ pub struct SupabaseClient {
     device_id: String,
 }
 
+#[allow(dead_code)]
 impl SupabaseClient {
     pub fn new(config: SupabaseConfig) -> Self {
         let device_id = Self::get_or_create_device_id();

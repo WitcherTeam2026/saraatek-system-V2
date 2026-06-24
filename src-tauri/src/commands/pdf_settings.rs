@@ -9,8 +9,9 @@ pub struct PdfTemplateSetting {
 }
 
 #[tauri::command]
-pub fn get_pdf_template_settings(db: tauri::State<Database>) -> Result<HashMap<String, String>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn get_pdf_template_settings(token: String, db: tauri::State<Database>) -> Result<HashMap<String, String>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     let mut settings = HashMap::new();
     let mut stmt = conn
         .prepare("SELECT setting_key, setting_value FROM pdf_template_settings")
@@ -34,9 +35,10 @@ pub fn get_pdf_template_settings(db: tauri::State<Database>) -> Result<HashMap<S
 pub fn save_pdf_template_setting(
     key: String,
     value: String,
-    db: tauri::State<Database>,
+    token: String, db: tauri::State<Database>,
 ) -> Result<(), String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     conn.execute(
         "INSERT OR REPLACE INTO pdf_template_settings (setting_key, setting_value, updated_at) VALUES (?1, ?2, CURRENT_TIMESTAMP)",
         rusqlite::params![key, value],
@@ -48,9 +50,10 @@ pub fn save_pdf_template_setting(
 #[tauri::command]
 pub fn save_pdf_template_settings(
     settings: Vec<PdfTemplateSetting>,
-    db: tauri::State<Database>,
+    token: String, db: tauri::State<Database>,
 ) -> Result<(), String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     for setting in &settings {
         conn.execute(
             "INSERT OR REPLACE INTO pdf_template_settings (setting_key, setting_value, updated_at) VALUES (?1, ?2, CURRENT_TIMESTAMP)",
@@ -62,8 +65,9 @@ pub fn save_pdf_template_settings(
 }
 
 #[tauri::command]
-pub fn reset_pdf_template_settings(db: tauri::State<Database>) -> Result<(), String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn reset_pdf_template_settings(token: String, db: tauri::State<Database>) -> Result<(), String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     conn.execute("DELETE FROM pdf_template_settings", [])
         .map_err(|e| e.to_string())?;
     

@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useAppStore } from '../stores/app'
+import { getAuthUser } from '../lib/secureStore'
 import {
   LayoutDashboard, Plus, Wrench, ShieldCheck, FileText, Receipt, Building2,
-  BarChart3, Settings, ChevronRight, PanelRightClose, PanelRightOpen, HardDrive,
-  BookOpen, TrendingUp, MessageSquare, FileStack, Database,
+  Settings, ChevronRight, PanelRightClose, PanelRightOpen, HardDrive,
+  BookOpen, TrendingUp, MessageSquare, FileStack, Database, Users,
 } from 'lucide-react'
 
 const navGroups: {
@@ -38,7 +39,6 @@ const navGroups: {
     label: 'Analytics',
     items: [
       { screen: 'analytics', label: 'Analytics', icon: <TrendingUp size={18} /> },
-      { screen: 'reports', label: 'Reports', icon: <BarChart3 size={18} /> },
     ],
   },
   {
@@ -47,6 +47,7 @@ const navGroups: {
       { screen: 'database-monitor', label: 'Database', icon: <Database size={18} /> },
       { screen: 'backup', label: 'Backup', icon: <HardDrive size={18} /> },
       { screen: 'settings', label: 'Settings', icon: <Settings size={18} /> },
+      { screen: 'user-management', label: 'Users', icon: <Users size={18} />, adminOnly: true },
     ],
   },
 ]
@@ -58,6 +59,17 @@ export function Sidebar() {
     () => localStorage.getItem('sidebar-collapsed') === 'true'
   )
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  useEffect(() => {
+    getAuthUser().then((u) => {
+      try {
+        setIsAdmin(JSON.parse(u).role === 'admin')
+      } catch {
+        setIsAdmin(false)
+      }
+    })
+  }, [])
 
   const toggle = () => {
     const next = !collapsed
@@ -116,7 +128,9 @@ export function Sidebar() {
                   {group.label}
                 </div>
               )}
-              {group.items.map((item) => {
+              {group.items
+                .filter((item) => !(item as any).adminOnly || isAdmin)
+                .map((item) => {
                 const isActive = currentScreen === item.screen
                 const isHovered = hoveredItem === item.screen
                 return (

@@ -62,8 +62,9 @@ pub(crate) fn get_field_audit_log_inner(
 #[tauri::command]
 pub fn get_field_audit_log(
     repair_id: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Vec<FieldAuditEntry>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     get_field_audit_log_inner(&conn, &repair_id)
 }

@@ -58,6 +58,7 @@ pub struct ReportsSummary {
     pub technician_performance: Vec<TechnicianPerf>,
 }
 
+#[allow(dead_code)]
 fn get_setting(conn: &Connection, key: &str) -> Result<Option<String>, String> {
     match conn.query_row(
         "SELECT value FROM shop_settings WHERE key = ?",
@@ -278,9 +279,10 @@ pub(crate) fn get_reports_summary_inner(
 pub fn get_revenue_report(
     start_date: String,
     end_date: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<RevenueReport, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     get_revenue_report_inner(&conn, &start_date, &end_date)
 }
 
@@ -288,9 +290,10 @@ pub fn get_revenue_report(
 pub fn get_repair_volume_report(
     start_date: String,
     end_date: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<VolumeReport, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     get_repair_volume_report_inner(&conn, &start_date, &end_date)
 }
 
@@ -299,9 +302,10 @@ pub fn get_technician_performance(
     start_date: String,
     end_date: String,
     include_inactive: bool,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Vec<TechnicianPerf>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     get_technician_performance_inner(&conn, &start_date, &end_date, include_inactive)
 }
 
@@ -310,9 +314,10 @@ pub fn get_reports_summary(
     start_date: String,
     end_date: String,
     include_inactive: bool,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<ReportsSummary, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     get_reports_summary_inner(&conn, &start_date, &end_date, include_inactive)
 }
 
@@ -395,9 +400,10 @@ pub struct WarrantyStatusCount {
 pub fn get_revenue_analytics(
     start_date: String,
     end_date: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<RevenueAnalytics, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
     let monthly = get_revenue_report_inner(&conn, &start_date, &end_date)?;
 
@@ -432,9 +438,10 @@ pub fn get_revenue_analytics(
 pub fn get_repair_analytics(
     start_date: String,
     end_date: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<RepairAnalytics, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
     let total_repairs: i64 = conn
         .query_row(
@@ -534,9 +541,10 @@ pub fn get_repair_analytics(
 pub fn get_customer_analytics(
     start_date: String,
     end_date: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<CustomerAnalytics, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
     let total_customers: i64 = conn
         .query_row("SELECT COUNT(*) FROM customers", [], |row| row.get(0))
@@ -626,9 +634,10 @@ pub fn get_customer_analytics(
 pub fn get_warranty_analytics(
     start_date: String,
     end_date: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<WarrantyAnalytics, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
 
     let total_warranties: i64 = conn
         .query_row(

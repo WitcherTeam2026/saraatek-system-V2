@@ -6,6 +6,7 @@ import { LiquidPanel } from '../components/liquid'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { ArrowLeft } from 'lucide-react'
 import type { Account, LedgerEntry, AccountBalance } from '../types'
+import { mapError } from '../lib/mapError'
 
 const staggerContainer = {
   hidden: { opacity: 0 },
@@ -54,7 +55,7 @@ export function Ledger() {
     setLoadingLedger(true)
     api.accounting.getLedger(selectedAccount, startDate || undefined, endDate || undefined)
       .then((entries) => { if (mounted.current) setLedgerEntries(entries) })
-      .catch((e) => setError(String(e)))
+      .catch((e) => setError(mapError(e)))
       .finally(() => { if (mounted.current) setLoadingLedger(false) })
   }, [selectedAccount, startDate, endDate])
 

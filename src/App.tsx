@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAppStore } from './stores/app'
+import { getAuthToken, getAuthExpiresAt, clearAuth, isSessionExpired } from './lib/secureStore'
 import { Layout } from './components/Layout'
 import { Dashboard } from './screens/Dashboard'
 import { NewRepairStep1 } from './screens/NewRepairStep1'
@@ -70,18 +71,52 @@ function ScreenRouter() {
 }
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    return localStorage.getItem('auth_token') !== null
-  })
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const checkAuth = () => {
-      const token = localStorage.getItem('auth_token')
-      setIsLoggedIn(token !== null)
-    }
-    window.addEventListener('storage', checkAuth)
-    return () => window.removeEventListener('storage', checkAuth)
+    checkAuth()
   }, [])
+
+  const checkAuth = async () => {
+    try {
+      const token = await getAuthToken()
+      if (!token) {
+        setIsLoggedIn(false)
+        return
+      }
+      if (await isSessionExpired()) {
+        await clearAuth()
+        setIsLoggedIn(false)
+        return
+      }
+      setIsLoggedIn(true)
+    } catch {
+      setIsLoggedIn(false)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Check session expiry every 60 seconds
+  useEffect(() => {
+    if (!isLoggedIn) return
+    const interval = setInterval(async () => {
+      if (await isSessionExpired()) {
+        await clearAuth()
+        setIsLoggedIn(false)
+      }
+    }, 60000)
+    return () => clearInterval(interval)
+  }, [isLoggedIn])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-canvas">
+        <div className="text-text-muted text-sm">Loading...</div>
+      </div>
+    )
+  }
 
   if (!isLoggedIn) {
     return <Login onLogin={() => setIsLoggedIn(true)} />

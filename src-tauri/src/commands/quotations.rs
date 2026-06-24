@@ -1,5 +1,5 @@
 use crate::db::Database;
-use chrono::Local;
+use chrono::Utc;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -127,7 +127,7 @@ pub(crate) fn create_quotation_inner(
     conn: &Connection,
     input: &CreateQuotationInput,
 ) -> Result<QuotationWithItems, String> {
-    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     let subtotal: f64 = input
         .items
@@ -178,7 +178,7 @@ fn set_repair_status(
     status: &str,
     note: &str,
 ) -> Result<(), String> {
-    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     conn.execute(
         "UPDATE repairs SET status = ?, updated_at = ? WHERE id = ?",
         rusqlite::params![status, now, repair_id],
@@ -207,7 +207,7 @@ pub(crate) fn approve_quotation_inner(
     id: i64,
     response_note: Option<&str>,
 ) -> Result<QuotationWithItems, String> {
-    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     conn.execute(
         "UPDATE quotations SET status = 'approved', responded_at = ?, response_note = ? WHERE id = ? AND status = 'pending'",
         rusqlite::params![now, response_note, id],
@@ -234,7 +234,7 @@ pub(crate) fn decline_quotation_inner(
     id: i64,
     response_note: Option<&str>,
 ) -> Result<QuotationWithItems, String> {
-    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     conn.execute(
         "UPDATE quotations SET status = 'declined', responded_at = ?, response_note = ? WHERE id = ? AND status = 'pending'",
         rusqlite::params![now, response_note, id],
@@ -338,15 +338,17 @@ pub(crate) fn get_invoice_items_inner(
 #[tauri::command]
 pub fn create_quotation(
     input: CreateQuotationInput,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<QuotationWithItems, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     create_quotation_inner(&conn, &input)
 }
 
 #[tauri::command]
-pub fn get_quotation(id: i64, db: State<Database>) -> Result<Option<QuotationWithItems>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+pub fn get_quotation(id: i64, token: String, db: State<Database>) -> Result<Option<QuotationWithItems>, String> {
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     match get_quotation_inner(&conn, id) {
         Ok(q) => Ok(Some(q)),
         Err(_) => Ok(None),
@@ -356,9 +358,10 @@ pub fn get_quotation(id: i64, db: State<Database>) -> Result<Option<QuotationWit
 #[tauri::command]
 pub fn get_quotation_by_repair(
     repair_id: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Option<QuotationWithItems>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     get_quotation_by_repair_inner(&conn, &repair_id)
 }
 
@@ -366,9 +369,10 @@ pub fn get_quotation_by_repair(
 pub fn approve_quotation(
     id: i64,
     response_note: Option<String>,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<QuotationWithItems, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     approve_quotation_inner(&conn, id, response_note.as_deref())
 }
 
@@ -376,9 +380,10 @@ pub fn approve_quotation(
 pub fn decline_quotation(
     id: i64,
     response_note: Option<String>,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<QuotationWithItems, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     decline_quotation_inner(&conn, id, response_note.as_deref())
 }
 
@@ -386,18 +391,20 @@ pub fn decline_quotation(
 pub fn create_invoice_items(
     repair_id: String,
     items: Vec<CreateQuotationItemInput>,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Vec<QuotationItem>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     create_invoice_items_inner(&conn, &repair_id, &items)
 }
 
 #[tauri::command]
 pub fn get_invoice_items(
     repair_id: String,
-    db: State<Database>,
+    token: String, db: State<Database>,
 ) -> Result<Vec<QuotationItem>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let _user = crate::commands::auth::require_auth(&token, &db)?;
+    let conn = db.get_conn()?;
     get_invoice_items_inner(&conn, &repair_id)
 }
 

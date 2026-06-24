@@ -19,17 +19,9 @@ export function RepairDetail() {
   const [data, setData] = useState<RepairWithCustomer | null>(null)
   const [history, setHistory] = useState<RepairHistory[]>([])
 
-  const [techFindings, setTechFindings] = useState('')
-  const [recommendedAction, setRecommendedAction] = useState('')
-  const [partsRequired, setPartsRequired] = useState('')
-  const [estimatedCost, setEstimatedCost] = useState('')
-  const [repairNotes, setRepairNotes] = useState('')
-  const [partsUsed, setPartsUsed] = useState('')
-
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [selectedStatus, setSelectedStatus] = useState('')
   const [statusNote, setStatusNote] = useState('')
-  const [saving, setSaving] = useState(false)
 
   const [quotation, setQuotation] = useState<QuotationWithItems | null>(null)
   const [invoiceItems, setInvoiceItems] = useState<QuotationItem[]>([])
@@ -76,12 +68,6 @@ export function RepairDetail() {
         if (cancelled) return
         if (r) {
           setData(r)
-          setTechFindings(r.repair.tech_findings || '')
-          setRecommendedAction(r.repair.recommended_action || '')
-          setPartsRequired(r.repair.parts_required || '')
-          setEstimatedCost(r.repair.estimated_cost?.toString() || '')
-          setRepairNotes(r.repair.repair_notes || '')
-          setPartsUsed(r.repair.parts_used || '')
         }
         const h = await api.repairs.history(repairId)
         if (cancelled) return; setHistory(h)
@@ -492,9 +478,16 @@ export function RepairDetail() {
         <Card>
           <h2 className="text-lg font-semibold text-text-primary mb-3">Invoice</h2>
           <p className="text-sm text-text-muted mb-4">Generate an invoice for this repair.</p>
-          <Button onClick={() => navigate('invoice-builder', { repairId })}>
-            Generate Invoice
-          </Button>
+          <div className="flex gap-3">
+            <Button onClick={() => navigate('invoice-builder', { repairId })}>
+              Generate Invoice
+            </Button>
+            {!payment && (
+              <Button variant="secondary" onClick={() => setShowPaymentModal(true)}>
+                Record Payment
+              </Button>
+            )}
+          </div>
         </Card>
       )}
 
